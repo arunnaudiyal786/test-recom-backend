@@ -1,0 +1,13 @@
+{
+  "top_k": 30,
+  "vector_weight": 0.7,
+  "metadata_weight": 0.3,
+  "priority_weights": {
+    "Critical": 1.0,
+    "High": 0.8,
+    "Medium": 0.5,
+    "Low": 0.3
+  },
+  "time_normalization_hours": 100.0,
+  "domain_filter": null
+}

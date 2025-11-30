@@ -1,0 +1,2235 @@
+[
+  {
+    "ticket_id": "JIRA-MM-040",
+    "title": "MM_ALDER service memory leak in event handler",
+    "description": "Memory usage grows continuously in event handler until service crashes. Heap dump shows retention of event listener objects. Issue started after recent deployment.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER",
+      "#MMALDR"
+    ],
+    "resolution_steps": [
+      "1. Analyze heap dump: jmap -dump:live,format=b,file=heap.bin <pid>",
+      "2. Identify leak source in background worker",
+      "3. Add proper resource cleanup in finally blocks",
+      "4. Implement connection pooling with max age",
+      "5. Deploy fix and monitor memory usage",
+      "6. Set up alerts for memory threshold (>80%)"
+    ],
+    "priority": "High",
+    "created_date": "2025-07-26",
+    "resolution_time_hours": 4.3
+  },
+  {
+    "ticket_id": "JIRA-CI-019",
+    "title": "CIW data validation errors in claims submission",
+    "description": "CIW claims submission rejecting valid records with validation errors. Error message: 'Invalid reference'. Validation logic too strict and rejecting legitimate edge cases.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Review validation rules in member registration/validators.py",
+      "2. Analyze rejected records to identify pattern",
+      "3. Update validation regex to handle edge cases",
+      "4. Add exception handling for null/empty values",
+      "5. Implement validation bypass for admin users",
+      "6. Update unit tests with edge case scenarios",
+      "7. Deploy to staging and test with sample data",
+      "8. Monitor error rates after production deployment"
+    ],
+    "priority": "High",
+    "created_date": "2025-10-15",
+    "resolution_time_hours": 6.4
+  },
+  {
+    "ticket_id": "JIRA-CI-025",
+    "title": "CIW data validation errors in provider enrollment",
+    "description": "CIW provider enrollment rejecting valid records with validation errors. Error message: 'Invalid date format'. Validation logic too strict and rejecting legitimate edge cases.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Review validation rules in eligibility verification/validators.py",
+      "2. Analyze rejected records to identify pattern",
+      "3. Update validation regex to handle edge cases",
+      "4. Add exception handling for null/empty values",
+      "5. Implement validation bypass for admin users",
+      "6. Update unit tests with edge case scenarios",
+      "7. Deploy to staging and test with sample data",
+      "8. Monitor error rates after production deployment"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-09-11",
+    "resolution_time_hours": 21.3
+  },
+  {
+    "ticket_id": "JIRA-CI-027",
+    "title": "CIW claims processor performance degradation",
+    "description": "Significant performance degradation in CIW claims processor. Response times increased from 100ms to 8000ms. Database queries show long execution times on providers table.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Run EXPLAIN on slow queries to identify missing indexes",
+      "2. Create composite index on members(column1, column2, column3)",
+      "3. Update table statistics: ANALYZE TABLE authorizations",
+      "4. Optimize query to use index hints",
+      "5. Implement query result caching (Redis)",
+      "6. Add database connection pooling",
+      "7. Monitor query performance after changes"
+    ],
+    "priority": "High",
+    "created_date": "2025-05-16",
+    "resolution_time_hours": 6.9
+  },
+  {
+    "ticket_id": "JIRA-CI-005",
+    "title": "CIW integration failing to sync authorization data",
+    "description": "CIW integration service unable to synchronize authorization data from upstream system. Sync job completes but data not updated in target database. Last successful sync was 24 hours ago.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Check CIW integration service logs: tail -f /var/log/ciw/integration.log",
+      "2. Verify API credentials and authentication token",
+      "3. Test connectivity to upstream system endpoint",
+      "4. Validate data transformation logic",
+      "5. Clear stale records from staging table",
+      "6. Restart integration service",
+      "7. Manually trigger sync job and monitor"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-10-12",
+    "resolution_time_hours": 4.8
+  },
+  {
+    "ticket_id": "JIRA-CI-023",
+    "title": "CIW claims processor performance degradation",
+    "description": "Significant performance degradation in CIW claims processor. Response times increased from 50ms to 3000ms. Database queries show long execution times on providers table.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Run EXPLAIN on slow queries to identify missing indexes",
+      "2. Create composite index on providers(column1, column2, column3)",
+      "3. Update table statistics: ANALYZE TABLE claims",
+      "4. Optimize query to use index hints",
+      "5. Implement query result caching (Redis)",
+      "6. Add database connection pooling",
+      "7. Monitor query performance after changes"
+    ],
+    "priority": "Critical",
+    "created_date": "2025-08-08",
+    "resolution_time_hours": 1.3
+  },
+  {
+    "ticket_id": "JIRA-Sp-008",
+    "title": "Specialty custom form builder module not loading correctly",
+    "description": "Custom custom form builder module in specialty application fails to load on startup. Browser console shows CSS loading error. Module worked correctly before latest release.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Check browser console for detailed error stack trace",
+      "2. Verify module dependencies in package.json",
+      "3. Clear browser cache and CDN cache",
+      "4. Check webpack build for missing chunks",
+      "5. Verify module export/import statements",
+      "6. Rebuild frontend: npm run build",
+      "7. Test in multiple browsers",
+      "8. Deploy fixed version to production"
+    ],
+    "priority": "High",
+    "created_date": "2025-06-10",
+    "resolution_time_hours": 6.9
+  },
+  {
+    "ticket_id": "JIRA-MM-013",
+    "title": "MM integration API returning 504 errors",
+    "description": "MM REST API endpoints timing out with 504 Gateway Timeout errors. Affects /api/v1/eligibility/check endpoint primarily. Backend processing takes longer than 60s timeout limit.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix"
+    ],
+    "resolution_steps": [
+      "1. Increase nginx timeout: proxy_read_timeout 120s",
+      "2. Optimize database query in /api/v1/eligibility/check handler",
+      "3. Add query index on frequently filtered columns",
+      "4. Implement response caching for read operations",
+      "5. Add asynchronous processing for long-running tasks",
+      "6. Test with production load simulator"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-07-06",
+    "resolution_time_hours": 22.6
+  },
+  {
+    "ticket_id": "JIRA-MM-004",
+    "title": "MM_ALDER service memory leak in cache manager",
+    "description": "Memory usage grows continuously in cache manager until service crashes. Heap dump shows retention of cache entry objects. Issue started after recent deployment.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER",
+      "#MMALDR"
+    ],
+    "resolution_steps": [
+      "1. Analyze heap dump: jmap -dump:live,format=b,file=heap.bin <pid>",
+      "2. Identify leak source in event handler",
+      "3. Add proper resource cleanup in finally blocks",
+      "4. Implement connection pooling with max age",
+      "5. Deploy fix and monitor memory usage",
+      "6. Set up alerts for memory threshold (>80%)"
+    ],
+    "priority": "Critical",
+    "created_date": "2025-11-01",
+    "resolution_time_hours": 3.1
+  },
+  {
+    "ticket_id": "JIRA-MM-038",
+    "title": "MM integration API returning 504 errors",
+    "description": "MM REST API endpoints timing out with 504 Gateway Timeout errors. Affects /api/v1/auth/verify endpoint primarily. Backend processing takes longer than 60s timeout limit.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix"
+    ],
+    "resolution_steps": [
+      "1. Increase nginx timeout: proxy_read_timeout 120s",
+      "2. Optimize database query in /api/v1/patient/lookup handler",
+      "3. Add query index on frequently filtered columns",
+      "4. Implement response caching for read operations",
+      "5. Add asynchronous processing for long-running tasks",
+      "6. Test with production load simulator"
+    ],
+    "priority": "Low",
+    "created_date": "2025-06-23",
+    "resolution_time_hours": 32.8
+  },
+  {
+    "ticket_id": "JIRA-CI-001",
+    "title": "CIW claims processor performance degradation",
+    "description": "Significant performance degradation in CIW claims processor. Response times increased from 200ms to 3000ms. Database queries show long execution times on claims table.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Run EXPLAIN on slow queries to identify missing indexes",
+      "2. Create composite index on authorizations(column1, column2, column3)",
+      "3. Update table statistics: ANALYZE TABLE members",
+      "4. Optimize query to use index hints",
+      "5. Implement query result caching (Redis)",
+      "6. Add database connection pooling",
+      "7. Monitor query performance after changes"
+    ],
+    "priority": "High",
+    "created_date": "2025-07-27",
+    "resolution_time_hours": 4.9
+  },
+  {
+    "ticket_id": "JIRA-MM-002",
+    "title": "MM_ALDER service memory leak in event handler",
+    "description": "Memory usage grows continuously in event handler until service crashes. Heap dump shows retention of cache entry objects. Issue started after recent deployment.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER",
+      "#MMALDR"
+    ],
+    "resolution_steps": [
+      "1. Analyze heap dump: jmap -dump:live,format=b,file=heap.bin <pid>",
+      "2. Identify leak source in cache manager",
+      "3. Add proper resource cleanup in finally blocks",
+      "4. Implement connection pooling with max age",
+      "5. Deploy fix and monitor memory usage",
+      "6. Set up alerts for memory threshold (>80%)"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-07-21",
+    "resolution_time_hours": 14.8
+  },
+  {
+    "ticket_id": "JIRA-MM-010",
+    "title": "MM batch job failing with ConcurrentModificationException",
+    "description": "Nightly MM batch processing job fails with ConcurrentModificationException. Job processes 100000 records but crashes at random point. No clear pattern in failure timing.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Review application logs for stack trace",
+      "2. Increase JVM heap size: -Xmx4g -Xms2g",
+      "3. Implement batch processing with chunking (1000 records/batch)",
+      "4. Add null checks and error handling",
+      "5. Implement transaction boundaries per chunk",
+      "6. Add retry logic with exponential backoff",
+      "7. Run test with production data snapshot"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-06-20",
+    "resolution_time_hours": 13.9
+  },
+  {
+    "ticket_id": "JIRA-MM-015",
+    "title": "MM_ALDER service memory leak in event handler",
+    "description": "Memory usage grows continuously in event handler until service crashes. Heap dump shows retention of connection objects. Issue started after recent deployment.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER",
+      "#MMALDR"
+    ],
+    "resolution_steps": [
+      "1. Analyze heap dump: jmap -dump:live,format=b,file=heap.bin <pid>",
+      "2. Identify leak source in data processing pipeline",
+      "3. Add proper resource cleanup in finally blocks",
+      "4. Implement connection pooling with max age",
+      "5. Deploy fix and monitor memory usage",
+      "6. Set up alerts for memory threshold (>80%)"
+    ],
+    "priority": "High",
+    "created_date": "2025-07-14",
+    "resolution_time_hours": 5.9
+  },
+  {
+    "ticket_id": "JIRA-MM-031",
+    "title": "Database connection timeout in MM integration layer",
+    "description": "Users experiencing timeout errors when connecting to MM database through MM integration layer. Error occurs intermittently during peak hours. Connection pool may be exhausted.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Check database connection pool settings in /etc/mm/config.yaml",
+      "2. Increase max_connections from 100 to 200",
+      "3. Adjust connection timeout from 10s to 30s",
+      "4. Restart MM service: systemctl restart mm_alder",
+      "5. Monitor connection pool metrics for 24 hours"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-09-17",
+    "resolution_time_hours": 11.0
+  },
+  {
+    "ticket_id": "JIRA-MM-017",
+    "title": "MM integration API returning 504 errors",
+    "description": "MM REST API endpoints timing out with 504 Gateway Timeout errors. Affects /api/v1/auth/verify endpoint primarily. Backend processing takes longer than 60s timeout limit.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix"
+    ],
+    "resolution_steps": [
+      "1. Increase nginx timeout: proxy_read_timeout 120s",
+      "2. Optimize database query in /api/v1/claims/process handler",
+      "3. Add query index on frequently filtered columns",
+      "4. Implement response caching for read operations",
+      "5. Add asynchronous processing for long-running tasks",
+      "6. Test with production load simulator"
+    ],
+    "priority": "Critical",
+    "created_date": "2025-10-20",
+    "resolution_time_hours": 3.4
+  },
+  {
+    "ticket_id": "JIRA-MM-021",
+    "title": "MM batch job failing with OutOfMemoryError",
+    "description": "Nightly MM batch processing job fails with OutOfMemoryError. Job processes 250000 records but crashes at random point. No clear pattern in failure timing.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Review application logs for stack trace",
+      "2. Increase JVM heap size: -Xmx4g -Xms2g",
+      "3. Implement batch processing with chunking (1000 records/batch)",
+      "4. Add null checks and error handling",
+      "5. Implement transaction boundaries per chunk",
+      "6. Add retry logic with exponential backoff",
+      "7. Run test with production data snapshot"
+    ],
+    "priority": "High",
+    "created_date": "2025-06-15",
+    "resolution_time_hours": 6.9
+  },
+  {
+    "ticket_id": "JIRA-MM-009",
+    "title": "MM integration API returning 504 errors",
+    "description": "MM REST API endpoints timing out with 504 Gateway Timeout errors. Affects /api/v1/patient/lookup endpoint primarily. Backend processing takes longer than 60s timeout limit.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix"
+    ],
+    "resolution_steps": [
+      "1. Increase nginx timeout: proxy_read_timeout 120s",
+      "2. Optimize database query in /api/v1/claims/process handler",
+      "3. Add query index on frequently filtered columns",
+      "4. Implement response caching for read operations",
+      "5. Add asynchronous processing for long-running tasks",
+      "6. Test with production load simulator"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-08-12",
+    "resolution_time_hours": 4.3
+  },
+  {
+    "ticket_id": "JIRA-Sp-011",
+    "title": "Specialty report generation extreme slowness",
+    "description": "Custom specialty reports experiencing extreme slowness. Affects analytics reports. Users unable to access critical business data. Report server load is at 95%.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Data Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Optimize report query to reduce data fetch time",
+      "2. Add database query pagination (1000 rows/page)",
+      "3. Implement report caching for frequently accessed reports",
+      "4. Create database materialized view for aggregations",
+      "5. Add background job queue for large report generation",
+      "6. Optimize report template rendering logic",
+      "7. Scale report server horizontally (add 2 more instances)",
+      "8. Monitor server metrics after optimization"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-11-02",
+    "resolution_time_hours": 4.4
+  },
+  {
+    "ticket_id": "JIRA-MM-023",
+    "title": "Database connection timeout in MM data processor",
+    "description": "Users experiencing timeout errors when connecting to MM database through MM data processor. Error occurs intermittently during peak hours. Connection pool may be exhausted.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Check database connection pool settings in /etc/mm/config.yaml",
+      "2. Increase max_connections from 100 to 200",
+      "3. Adjust connection timeout from 10s to 30s",
+      "4. Restart MM service: systemctl restart mm_alder",
+      "5. Monitor connection pool metrics for 24 hours"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-07-25",
+    "resolution_time_hours": 8.8
+  },
+  {
+    "ticket_id": "JIRA-CI-030",
+    "title": "CIW provider lookup performance degradation",
+    "description": "Significant performance degradation in CIW provider lookup. Response times increased from 50ms to 5000ms. Database queries show long execution times on claims table.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Run EXPLAIN on slow queries to identify missing indexes",
+      "2. Create composite index on providers(column1, column2, column3)",
+      "3. Update table statistics: ANALYZE TABLE providers",
+      "4. Optimize query to use index hints",
+      "5. Implement query result caching (Redis)",
+      "6. Add database connection pooling",
+      "7. Monitor query performance after changes"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-11-09",
+    "resolution_time_hours": 7.1
+  },
+  {
+    "ticket_id": "JIRA-Sp-007",
+    "title": "Specialty reporting dashboard module not loading correctly",
+    "description": "Custom reporting dashboard module in specialty application fails to load on startup. Browser console shows Module not found. Module worked correctly before latest release.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Check browser console for detailed error stack trace",
+      "2. Verify module dependencies in package.json",
+      "3. Clear browser cache and CDN cache",
+      "4. Check webpack build for missing chunks",
+      "5. Verify module export/import statements",
+      "6. Rebuild frontend: npm run build",
+      "7. Test in multiple browsers",
+      "8. Deploy fixed version to production"
+    ],
+    "priority": "High",
+    "created_date": "2025-07-27",
+    "resolution_time_hours": 2.0
+  },
+  {
+    "ticket_id": "JIRA-CI-004",
+    "title": "CIW integration failing to sync claim status",
+    "description": "CIW integration service unable to synchronize claim status from upstream system. Sync job completes but data not updated in target database. Last successful sync was 12 hours ago.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Check CIW integration service logs: tail -f /var/log/ciw/integration.log",
+      "2. Verify API credentials and authentication token",
+      "3. Test connectivity to upstream system endpoint",
+      "4. Validate data transformation logic",
+      "5. Clear stale records from staging table",
+      "6. Restart integration service",
+      "7. Manually trigger sync job and monitor"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-11-07",
+    "resolution_time_hours": 23.3
+  },
+  {
+    "ticket_id": "JIRA-CI-014",
+    "title": "CIW integration failing to sync authorization data",
+    "description": "CIW integration service unable to synchronize authorization data from upstream system. Sync job completes but data not updated in target database. Last successful sync was 4 hours ago.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Check CIW integration service logs: tail -f /var/log/ciw/integration.log",
+      "2. Verify API credentials and authentication token",
+      "3. Test connectivity to upstream system endpoint",
+      "4. Validate data transformation logic",
+      "5. Clear stale records from staging table",
+      "6. Restart integration service",
+      "7. Manually trigger sync job and monitor"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-05-22",
+    "resolution_time_hours": 12.6
+  },
+  {
+    "ticket_id": "JIRA-Sp-017",
+    "title": "Specialty custom workflow failing at document generation",
+    "description": "Custom workflow for specialty processing fails at document generation step. Error: 'Missing required data'. Workflow engine shows step timeout after 300 seconds.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Review workflow definition in specialty/workflows/workflow_17.xml",
+      "2. Increase step timeout in workflow engine config",
+      "3. Add error handling and retry logic to data validation",
+      "4. Verify external service dependencies are available",
+      "5. Implement async processing for long-running steps",
+      "6. Add workflow state persistence",
+      "7. Test workflow with production-like data",
+      "8. Enable detailed workflow execution logging"
+    ],
+    "priority": "High",
+    "created_date": "2025-09-25",
+    "resolution_time_hours": 6.5
+  },
+  {
+    "ticket_id": "JIRA-Sp-019",
+    "title": "Specialty report generation export errors",
+    "description": "Custom specialty reports experiencing export errors. Affects compliance reports. Users unable to access critical business data. Report server load is at 95%.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Data Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Optimize report query to reduce data fetch time",
+      "2. Add database query pagination (1000 rows/page)",
+      "3. Implement report caching for frequently accessed reports",
+      "4. Create database materialized view for aggregations",
+      "5. Add background job queue for large report generation",
+      "6. Optimize report template rendering logic",
+      "7. Scale report server horizontally (add 2 more instances)",
+      "8. Monitor server metrics after optimization"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-07-16",
+    "resolution_time_hours": 9.2
+  },
+  {
+    "ticket_id": "JIRA-CI-034",
+    "title": "CIW data validation errors in claims submission",
+    "description": "CIW claims submission rejecting valid records with validation errors. Error message: 'Required field missing'. Validation logic too strict and rejecting legitimate edge cases.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Review validation rules in provider enrollment/validators.py",
+      "2. Analyze rejected records to identify pattern",
+      "3. Update validation regex to handle edge cases",
+      "4. Add exception handling for null/empty values",
+      "5. Implement validation bypass for admin users",
+      "6. Update unit tests with edge case scenarios",
+      "7. Deploy to staging and test with sample data",
+      "8. Monitor error rates after production deployment"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-06-20",
+    "resolution_time_hours": 21.3
+  },
+  {
+    "ticket_id": "JIRA-MM-011",
+    "title": "MM integration API returning 504 errors",
+    "description": "MM REST API endpoints timing out with 504 Gateway Timeout errors. Affects /api/v1/eligibility/check endpoint primarily. Backend processing takes longer than 60s timeout limit.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix"
+    ],
+    "resolution_steps": [
+      "1. Increase nginx timeout: proxy_read_timeout 120s",
+      "2. Optimize database query in /api/v1/claims/process handler",
+      "3. Add query index on frequently filtered columns",
+      "4. Implement response caching for read operations",
+      "5. Add asynchronous processing for long-running tasks",
+      "6. Test with production load simulator"
+    ],
+    "priority": "Critical",
+    "created_date": "2025-08-17",
+    "resolution_time_hours": 1.4
+  },
+  {
+    "ticket_id": "JIRA-Sp-012",
+    "title": "Specialty custom form builder module not loading correctly",
+    "description": "Custom custom form builder module in specialty application fails to load on startup. Browser console shows JavaScript runtime error. Module worked correctly before latest release.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Check browser console for detailed error stack trace",
+      "2. Verify module dependencies in package.json",
+      "3. Clear browser cache and CDN cache",
+      "4. Check webpack build for missing chunks",
+      "5. Verify module export/import statements",
+      "6. Rebuild frontend: npm run build",
+      "7. Test in multiple browsers",
+      "8. Deploy fixed version to production"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-09-23",
+    "resolution_time_hours": 23.8
+  },
+  {
+    "ticket_id": "JIRA-Sp-003",
+    "title": "Specialty analytics widget module not loading correctly",
+    "description": "Custom analytics widget module in specialty application fails to load on startup. Browser console shows JavaScript runtime error. Module worked correctly before latest release.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Check browser console for detailed error stack trace",
+      "2. Verify module dependencies in package.json",
+      "3. Clear browser cache and CDN cache",
+      "4. Check webpack build for missing chunks",
+      "5. Verify module export/import statements",
+      "6. Rebuild frontend: npm run build",
+      "7. Test in multiple browsers",
+      "8. Deploy fixed version to production"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-06-16",
+    "resolution_time_hours": 18.6
+  },
+  {
+    "ticket_id": "JIRA-Sp-023",
+    "title": "Specialty custom workflow failing at data validation",
+    "description": "Custom workflow for specialty processing fails at data validation step. Error: 'Timeout exceeded'. Workflow engine shows step timeout after 60 seconds.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Review workflow definition in specialty/workflows/workflow_23.xml",
+      "2. Increase step timeout in workflow engine config",
+      "3. Add error handling and retry logic to notification delivery",
+      "4. Verify external service dependencies are available",
+      "5. Implement async processing for long-running steps",
+      "6. Add workflow state persistence",
+      "7. Test workflow with production-like data",
+      "8. Enable detailed workflow execution logging"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-06-26",
+    "resolution_time_hours": 7.8
+  },
+  {
+    "ticket_id": "JIRA-MM-032",
+    "title": "MM integration API returning 504 errors",
+    "description": "MM REST API endpoints timing out with 504 Gateway Timeout errors. Affects /api/v1/patient/lookup endpoint primarily. Backend processing takes longer than 60s timeout limit.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix"
+    ],
+    "resolution_steps": [
+      "1. Increase nginx timeout: proxy_read_timeout 120s",
+      "2. Optimize database query in /api/v1/eligibility/check handler",
+      "3. Add query index on frequently filtered columns",
+      "4. Implement response caching for read operations",
+      "5. Add asynchronous processing for long-running tasks",
+      "6. Test with production load simulator"
+    ],
+    "priority": "High",
+    "created_date": "2025-08-10",
+    "resolution_time_hours": 3.8
+  },
+  {
+    "ticket_id": "JIRA-MM-020",
+    "title": "MM batch job failing with OutOfMemoryError",
+    "description": "Nightly MM batch processing job fails with OutOfMemoryError. Job processes 10000 records but crashes at random point. No clear pattern in failure timing.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Review application logs for stack trace",
+      "2. Increase JVM heap size: -Xmx4g -Xms2g",
+      "3. Implement batch processing with chunking (1000 records/batch)",
+      "4. Add null checks and error handling",
+      "5. Implement transaction boundaries per chunk",
+      "6. Add retry logic with exponential backoff",
+      "7. Run test with production data snapshot"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-06-27",
+    "resolution_time_hours": 14.8
+  },
+  {
+    "ticket_id": "JIRA-MM-016",
+    "title": "MM integration API returning 504 errors",
+    "description": "MM REST API endpoints timing out with 504 Gateway Timeout errors. Affects /api/v1/patient/lookup endpoint primarily. Backend processing takes longer than 60s timeout limit.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix"
+    ],
+    "resolution_steps": [
+      "1. Increase nginx timeout: proxy_read_timeout 120s",
+      "2. Optimize database query in /api/v1/auth/verify handler",
+      "3. Add query index on frequently filtered columns",
+      "4. Implement response caching for read operations",
+      "5. Add asynchronous processing for long-running tasks",
+      "6. Test with production load simulator"
+    ],
+    "priority": "Critical",
+    "created_date": "2025-09-11",
+    "resolution_time_hours": 4.0
+  },
+  {
+    "ticket_id": "JIRA-CI-017",
+    "title": "CIW data validation errors in claims submission",
+    "description": "CIW claims submission rejecting valid records with validation errors. Error message: 'Required field missing'. Validation logic too strict and rejecting legitimate edge cases.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Review validation rules in eligibility verification/validators.py",
+      "2. Analyze rejected records to identify pattern",
+      "3. Update validation regex to handle edge cases",
+      "4. Add exception handling for null/empty values",
+      "5. Implement validation bypass for admin users",
+      "6. Update unit tests with edge case scenarios",
+      "7. Deploy to staging and test with sample data",
+      "8. Monitor error rates after production deployment"
+    ],
+    "priority": "High",
+    "created_date": "2025-09-03",
+    "resolution_time_hours": 4.0
+  },
+  {
+    "ticket_id": "JIRA-Sp-013",
+    "title": "Specialty analytics widget module not loading correctly",
+    "description": "Custom analytics widget module in specialty application fails to load on startup. Browser console shows CSS loading error. Module worked correctly before latest release.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Check browser console for detailed error stack trace",
+      "2. Verify module dependencies in package.json",
+      "3. Clear browser cache and CDN cache",
+      "4. Check webpack build for missing chunks",
+      "5. Verify module export/import statements",
+      "6. Rebuild frontend: npm run build",
+      "7. Test in multiple browsers",
+      "8. Deploy fixed version to production"
+    ],
+    "priority": "Critical",
+    "created_date": "2025-06-25",
+    "resolution_time_hours": 3.3
+  },
+  {
+    "ticket_id": "JIRA-Sp-021",
+    "title": "Specialty report generation generation failures",
+    "description": "Custom specialty reports experiencing generation failures. Affects compliance reports. Users unable to access critical business data. Report server load is at 95%.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Data Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Optimize report query to reduce data fetch time",
+      "2. Add database query pagination (1000 rows/page)",
+      "3. Implement report caching for frequently accessed reports",
+      "4. Create database materialized view for aggregations",
+      "5. Add background job queue for large report generation",
+      "6. Optimize report template rendering logic",
+      "7. Scale report server horizontally (add 2 more instances)",
+      "8. Monitor server metrics after optimization"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-10-23",
+    "resolution_time_hours": 4.5
+  },
+  {
+    "ticket_id": "JIRA-MM-018",
+    "title": "Database connection timeout in MM core service",
+    "description": "Users experiencing timeout errors when connecting to MM database through MM core service. Error occurs intermittently during peak hours. Connection pool may be exhausted.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Check database connection pool settings in /etc/mm/config.yaml",
+      "2. Increase max_connections from 100 to 200",
+      "3. Adjust connection timeout from 10s to 30s",
+      "4. Restart MM service: systemctl restart mm_alder",
+      "5. Monitor connection pool metrics for 24 hours"
+    ],
+    "priority": "High",
+    "created_date": "2025-09-14",
+    "resolution_time_hours": 7.8
+  },
+  {
+    "ticket_id": "JIRA-Sp-025",
+    "title": "Specialty reporting dashboard module not loading correctly",
+    "description": "Custom reporting dashboard module in specialty application fails to load on startup. Browser console shows Dependency injection failed. Module worked correctly before latest release.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Check browser console for detailed error stack trace",
+      "2. Verify module dependencies in package.json",
+      "3. Clear browser cache and CDN cache",
+      "4. Check webpack build for missing chunks",
+      "5. Verify module export/import statements",
+      "6. Rebuild frontend: npm run build",
+      "7. Test in multiple browsers",
+      "8. Deploy fixed version to production"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-10-06",
+    "resolution_time_hours": 12.6
+  },
+  {
+    "ticket_id": "JIRA-MM-026",
+    "title": "MM integration API returning 504 errors",
+    "description": "MM REST API endpoints timing out with 504 Gateway Timeout errors. Affects /api/v1/patient/lookup endpoint primarily. Backend processing takes longer than 60s timeout limit.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix"
+    ],
+    "resolution_steps": [
+      "1. Increase nginx timeout: proxy_read_timeout 120s",
+      "2. Optimize database query in /api/v1/patient/lookup handler",
+      "3. Add query index on frequently filtered columns",
+      "4. Implement response caching for read operations",
+      "5. Add asynchronous processing for long-running tasks",
+      "6. Test with production load simulator"
+    ],
+    "priority": "High",
+    "created_date": "2025-09-08",
+    "resolution_time_hours": 5.5
+  },
+  {
+    "ticket_id": "JIRA-Sp-016",
+    "title": "Specialty report generation incorrect data",
+    "description": "Custom specialty reports experiencing incorrect data. Affects financial reports. Users unable to access critical business data. Report server load is at 98%.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Data Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Optimize report query to reduce data fetch time",
+      "2. Add database query pagination (1000 rows/page)",
+      "3. Implement report caching for frequently accessed reports",
+      "4. Create database materialized view for aggregations",
+      "5. Add background job queue for large report generation",
+      "6. Optimize report template rendering logic",
+      "7. Scale report server horizontally (add 2 more instances)",
+      "8. Monitor server metrics after optimization"
+    ],
+    "priority": "High",
+    "created_date": "2025-09-14",
+    "resolution_time_hours": 2.2
+  },
+  {
+    "ticket_id": "JIRA-CI-031",
+    "title": "CIW integration failing to sync claim status",
+    "description": "CIW integration service unable to synchronize claim status from upstream system. Sync job completes but data not updated in target database. Last successful sync was 48 hours ago.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Check CIW integration service logs: tail -f /var/log/ciw/integration.log",
+      "2. Verify API credentials and authentication token",
+      "3. Test connectivity to upstream system endpoint",
+      "4. Validate data transformation logic",
+      "5. Clear stale records from staging table",
+      "6. Restart integration service",
+      "7. Manually trigger sync job and monitor"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-09-29",
+    "resolution_time_hours": 19.8
+  },
+  {
+    "ticket_id": "JIRA-CI-022",
+    "title": "CIW integration failing to sync claim status",
+    "description": "CIW integration service unable to synchronize claim status from upstream system. Sync job completes but data not updated in target database. Last successful sync was 24 hours ago.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Check CIW integration service logs: tail -f /var/log/ciw/integration.log",
+      "2. Verify API credentials and authentication token",
+      "3. Test connectivity to upstream system endpoint",
+      "4. Validate data transformation logic",
+      "5. Clear stale records from staging table",
+      "6. Restart integration service",
+      "7. Manually trigger sync job and monitor"
+    ],
+    "priority": "Low",
+    "created_date": "2025-08-19",
+    "resolution_time_hours": 61.4
+  },
+  {
+    "ticket_id": "JIRA-Sp-001",
+    "title": "Specialty custom workflow failing at data validation",
+    "description": "Custom workflow for specialty processing fails at data validation step. Error: 'Timeout exceeded'. Workflow engine shows step timeout after 60 seconds.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Review workflow definition in specialty/workflows/workflow_1.xml",
+      "2. Increase step timeout in workflow engine config",
+      "3. Add error handling and retry logic to notification delivery",
+      "4. Verify external service dependencies are available",
+      "5. Implement async processing for long-running steps",
+      "6. Add workflow state persistence",
+      "7. Test workflow with production-like data",
+      "8. Enable detailed workflow execution logging"
+    ],
+    "priority": "High",
+    "created_date": "2025-08-17",
+    "resolution_time_hours": 4.8
+  },
+  {
+    "ticket_id": "JIRA-Sp-010",
+    "title": "Specialty report generation export errors",
+    "description": "Custom specialty reports experiencing export errors. Affects operational reports. Users unable to access critical business data. Report server load is at 90%.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Data Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Optimize report query to reduce data fetch time",
+      "2. Add database query pagination (1000 rows/page)",
+      "3. Implement report caching for frequently accessed reports",
+      "4. Create database materialized view for aggregations",
+      "5. Add background job queue for large report generation",
+      "6. Optimize report template rendering logic",
+      "7. Scale report server horizontally (add 2 more instances)",
+      "8. Monitor server metrics after optimization"
+    ],
+    "priority": "High",
+    "created_date": "2025-11-04",
+    "resolution_time_hours": 5.8
+  },
+  {
+    "ticket_id": "JIRA-MM-033",
+    "title": "MM integration API returning 504 errors",
+    "description": "MM REST API endpoints timing out with 504 Gateway Timeout errors. Affects /api/v1/eligibility/check endpoint primarily. Backend processing takes longer than 60s timeout limit.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix"
+    ],
+    "resolution_steps": [
+      "1. Increase nginx timeout: proxy_read_timeout 120s",
+      "2. Optimize database query in /api/v1/auth/verify handler",
+      "3. Add query index on frequently filtered columns",
+      "4. Implement response caching for read operations",
+      "5. Add asynchronous processing for long-running tasks",
+      "6. Test with production load simulator"
+    ],
+    "priority": "Low",
+    "created_date": "2025-07-25",
+    "resolution_time_hours": 48.1
+  },
+  {
+    "ticket_id": "JIRA-MM-034",
+    "title": "MM_ALDER service memory leak in event handler",
+    "description": "Memory usage grows continuously in event handler until service crashes. Heap dump shows retention of session objects. Issue started after recent deployment.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER",
+      "#MMALDR"
+    ],
+    "resolution_steps": [
+      "1. Analyze heap dump: jmap -dump:live,format=b,file=heap.bin <pid>",
+      "2. Identify leak source in background worker",
+      "3. Add proper resource cleanup in finally blocks",
+      "4. Implement connection pooling with max age",
+      "5. Deploy fix and monitor memory usage",
+      "6. Set up alerts for memory threshold (>80%)"
+    ],
+    "priority": "Critical",
+    "created_date": "2025-11-10",
+    "resolution_time_hours": 2.9
+  },
+  {
+    "ticket_id": "JIRA-MM-028",
+    "title": "MM_ALDER service memory leak in event handler",
+    "description": "Memory usage grows continuously in event handler until service crashes. Heap dump shows retention of cache entry objects. Issue started after recent deployment.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER",
+      "#MMALDR"
+    ],
+    "resolution_steps": [
+      "1. Analyze heap dump: jmap -dump:live,format=b,file=heap.bin <pid>",
+      "2. Identify leak source in background worker",
+      "3. Add proper resource cleanup in finally blocks",
+      "4. Implement connection pooling with max age",
+      "5. Deploy fix and monitor memory usage",
+      "6. Set up alerts for memory threshold (>80%)"
+    ],
+    "priority": "High",
+    "created_date": "2025-09-25",
+    "resolution_time_hours": 6.1
+  },
+  {
+    "ticket_id": "JIRA-CI-006",
+    "title": "CIW claims processor performance degradation",
+    "description": "Significant performance degradation in CIW claims processor. Response times increased from 200ms to 5000ms. Database queries show long execution times on members table.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Run EXPLAIN on slow queries to identify missing indexes",
+      "2. Create composite index on authorizations(column1, column2, column3)",
+      "3. Update table statistics: ANALYZE TABLE providers",
+      "4. Optimize query to use index hints",
+      "5. Implement query result caching (Redis)",
+      "6. Add database connection pooling",
+      "7. Monitor query performance after changes"
+    ],
+    "priority": "High",
+    "created_date": "2025-08-05",
+    "resolution_time_hours": 2.1
+  },
+  {
+    "ticket_id": "JIRA-CI-033",
+    "title": "CIW data validation errors in eligibility verification",
+    "description": "CIW eligibility verification rejecting valid records with validation errors. Error message: 'Required field missing'. Validation logic too strict and rejecting legitimate edge cases.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Review validation rules in claims submission/validators.py",
+      "2. Analyze rejected records to identify pattern",
+      "3. Update validation regex to handle edge cases",
+      "4. Add exception handling for null/empty values",
+      "5. Implement validation bypass for admin users",
+      "6. Update unit tests with edge case scenarios",
+      "7. Deploy to staging and test with sample data",
+      "8. Monitor error rates after production deployment"
+    ],
+    "priority": "High",
+    "created_date": "2025-07-07",
+    "resolution_time_hours": 2.9
+  },
+  {
+    "ticket_id": "JIRA-MM-014",
+    "title": "Database connection timeout in MM_ALDER module",
+    "description": "Users experiencing timeout errors when connecting to MM database through MM_ALDER module. Error occurs intermittently during peak hours. Connection pool may be exhausted.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Check database connection pool settings in /etc/mm/config.yaml",
+      "2. Increase max_connections from 100 to 200",
+      "3. Adjust connection timeout from 10s to 30s",
+      "4. Restart MM service: systemctl restart mm_alder",
+      "5. Monitor connection pool metrics for 24 hours"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-09-23",
+    "resolution_time_hours": 12.0
+  },
+  {
+    "ticket_id": "JIRA-Sp-014",
+    "title": "Specialty report generation extreme slowness",
+    "description": "Custom specialty reports experiencing extreme slowness. Affects analytics reports. Users unable to access critical business data. Report server load is at 95%.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Data Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Optimize report query to reduce data fetch time",
+      "2. Add database query pagination (1000 rows/page)",
+      "3. Implement report caching for frequently accessed reports",
+      "4. Create database materialized view for aggregations",
+      "5. Add background job queue for large report generation",
+      "6. Optimize report template rendering logic",
+      "7. Scale report server horizontally (add 2 more instances)",
+      "8. Monitor server metrics after optimization"
+    ],
+    "priority": "Critical",
+    "created_date": "2025-10-03",
+    "resolution_time_hours": 1.2
+  },
+  {
+    "ticket_id": "JIRA-CI-024",
+    "title": "CIW integration failing to sync claim status",
+    "description": "CIW integration service unable to synchronize claim status from upstream system. Sync job completes but data not updated in target database. Last successful sync was 4 hours ago.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Check CIW integration service logs: tail -f /var/log/ciw/integration.log",
+      "2. Verify API credentials and authentication token",
+      "3. Test connectivity to upstream system endpoint",
+      "4. Validate data transformation logic",
+      "5. Clear stale records from staging table",
+      "6. Restart integration service",
+      "7. Manually trigger sync job and monitor"
+    ],
+    "priority": "Critical",
+    "created_date": "2025-09-17",
+    "resolution_time_hours": 2.3
+  },
+  {
+    "ticket_id": "JIRA-MM-019",
+    "title": "MM batch job failing with ConcurrentModificationException",
+    "description": "Nightly MM batch processing job fails with ConcurrentModificationException. Job processes 100000 records but crashes at random point. No clear pattern in failure timing.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Review application logs for stack trace",
+      "2. Increase JVM heap size: -Xmx4g -Xms2g",
+      "3. Implement batch processing with chunking (1000 records/batch)",
+      "4. Add null checks and error handling",
+      "5. Implement transaction boundaries per chunk",
+      "6. Add retry logic with exponential backoff",
+      "7. Run test with production data snapshot"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-09-11",
+    "resolution_time_hours": 14.3
+  },
+  {
+    "ticket_id": "JIRA-CI-003",
+    "title": "CIW data validation errors in eligibility verification",
+    "description": "CIW eligibility verification rejecting valid records with validation errors. Error message: 'Invalid date format'. Validation logic too strict and rejecting legitimate edge cases.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Review validation rules in member registration/validators.py",
+      "2. Analyze rejected records to identify pattern",
+      "3. Update validation regex to handle edge cases",
+      "4. Add exception handling for null/empty values",
+      "5. Implement validation bypass for admin users",
+      "6. Update unit tests with edge case scenarios",
+      "7. Deploy to staging and test with sample data",
+      "8. Monitor error rates after production deployment"
+    ],
+    "priority": "High",
+    "created_date": "2025-07-15",
+    "resolution_time_hours": 4.6
+  },
+  {
+    "ticket_id": "JIRA-Sp-009",
+    "title": "Specialty workflow designer module not loading correctly",
+    "description": "Custom workflow designer module in specialty application fails to load on startup. Browser console shows Module not found. Module worked correctly before latest release.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Check browser console for detailed error stack trace",
+      "2. Verify module dependencies in package.json",
+      "3. Clear browser cache and CDN cache",
+      "4. Check webpack build for missing chunks",
+      "5. Verify module export/import statements",
+      "6. Rebuild frontend: npm run build",
+      "7. Test in multiple browsers",
+      "8. Deploy fixed version to production"
+    ],
+    "priority": "High",
+    "created_date": "2025-10-21",
+    "resolution_time_hours": 4.0
+  },
+  {
+    "ticket_id": "JIRA-CI-011",
+    "title": "CIW integration failing to sync authorization data",
+    "description": "CIW integration service unable to synchronize authorization data from upstream system. Sync job completes but data not updated in target database. Last successful sync was 24 hours ago.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Check CIW integration service logs: tail -f /var/log/ciw/integration.log",
+      "2. Verify API credentials and authentication token",
+      "3. Test connectivity to upstream system endpoint",
+      "4. Validate data transformation logic",
+      "5. Clear stale records from staging table",
+      "6. Restart integration service",
+      "7. Manually trigger sync job and monitor"
+    ],
+    "priority": "High",
+    "created_date": "2025-08-22",
+    "resolution_time_hours": 7.7
+  },
+  {
+    "ticket_id": "JIRA-CI-010",
+    "title": "CIW data validation errors in eligibility verification",
+    "description": "CIW eligibility verification rejecting valid records with validation errors. Error message: 'Invalid reference'. Validation logic too strict and rejecting legitimate edge cases.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Review validation rules in provider enrollment/validators.py",
+      "2. Analyze rejected records to identify pattern",
+      "3. Update validation regex to handle edge cases",
+      "4. Add exception handling for null/empty values",
+      "5. Implement validation bypass for admin users",
+      "6. Update unit tests with edge case scenarios",
+      "7. Deploy to staging and test with sample data",
+      "8. Monitor error rates after production deployment"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-10-16",
+    "resolution_time_hours": 7.4
+  },
+  {
+    "ticket_id": "JIRA-CI-009",
+    "title": "CIW authorization engine performance degradation",
+    "description": "Significant performance degradation in CIW authorization engine. Response times increased from 50ms to 8000ms. Database queries show long execution times on providers table.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Run EXPLAIN on slow queries to identify missing indexes",
+      "2. Create composite index on providers(column1, column2, column3)",
+      "3. Update table statistics: ANALYZE TABLE authorizations",
+      "4. Optimize query to use index hints",
+      "5. Implement query result caching (Redis)",
+      "6. Add database connection pooling",
+      "7. Monitor query performance after changes"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-08-04",
+    "resolution_time_hours": 7.5
+  },
+  {
+    "ticket_id": "JIRA-Sp-022",
+    "title": "Specialty report generation extreme slowness",
+    "description": "Custom specialty reports experiencing extreme slowness. Affects analytics reports. Users unable to access critical business data. Report server load is at 98%.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Data Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Optimize report query to reduce data fetch time",
+      "2. Add database query pagination (1000 rows/page)",
+      "3. Implement report caching for frequently accessed reports",
+      "4. Create database materialized view for aggregations",
+      "5. Add background job queue for large report generation",
+      "6. Optimize report template rendering logic",
+      "7. Scale report server horizontally (add 2 more instances)",
+      "8. Monitor server metrics after optimization"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-11-08",
+    "resolution_time_hours": 16.7
+  },
+  {
+    "ticket_id": "JIRA-Sp-004",
+    "title": "Specialty custom workflow failing at notification delivery",
+    "description": "Custom workflow for specialty processing fails at notification delivery step. Error: 'Timeout exceeded'. Workflow engine shows step timeout after 30 seconds.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Review workflow definition in specialty/workflows/workflow_4.xml",
+      "2. Increase step timeout in workflow engine config",
+      "3. Add error handling and retry logic to approval routing",
+      "4. Verify external service dependencies are available",
+      "5. Implement async processing for long-running steps",
+      "6. Add workflow state persistence",
+      "7. Test workflow with production-like data",
+      "8. Enable detailed workflow execution logging"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-07-19",
+    "resolution_time_hours": 17.8
+  },
+  {
+    "ticket_id": "JIRA-MM-006",
+    "title": "Database connection timeout in MM core service",
+    "description": "Users experiencing timeout errors when connecting to MM database through MM core service. Error occurs intermittently during peak hours. Connection pool may be exhausted.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Check database connection pool settings in /etc/mm/config.yaml",
+      "2. Increase max_connections from 100 to 200",
+      "3. Adjust connection timeout from 10s to 30s",
+      "4. Restart MM service: systemctl restart mm_alder",
+      "5. Monitor connection pool metrics for 24 hours"
+    ],
+    "priority": "Low",
+    "created_date": "2025-06-08",
+    "resolution_time_hours": 30.7
+  },
+  {
+    "ticket_id": "JIRA-MM-022",
+    "title": "MM integration API returning 504 errors",
+    "description": "MM REST API endpoints timing out with 504 Gateway Timeout errors. Affects /api/v1/claims/process endpoint primarily. Backend processing takes longer than 60s timeout limit.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix"
+    ],
+    "resolution_steps": [
+      "1. Increase nginx timeout: proxy_read_timeout 120s",
+      "2. Optimize database query in /api/v1/eligibility/check handler",
+      "3. Add query index on frequently filtered columns",
+      "4. Implement response caching for read operations",
+      "5. Add asynchronous processing for long-running tasks",
+      "6. Test with production load simulator"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-11-05",
+    "resolution_time_hours": 6.8
+  },
+  {
+    "ticket_id": "JIRA-CI-012",
+    "title": "CIW claims processor performance degradation",
+    "description": "Significant performance degradation in CIW claims processor. Response times increased from 200ms to 5000ms. Database queries show long execution times on claims table.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Run EXPLAIN on slow queries to identify missing indexes",
+      "2. Create composite index on authorizations(column1, column2, column3)",
+      "3. Update table statistics: ANALYZE TABLE members",
+      "4. Optimize query to use index hints",
+      "5. Implement query result caching (Redis)",
+      "6. Add database connection pooling",
+      "7. Monitor query performance after changes"
+    ],
+    "priority": "High",
+    "created_date": "2025-07-13",
+    "resolution_time_hours": 7.1
+  },
+  {
+    "ticket_id": "JIRA-CI-013",
+    "title": "CIW eligibility checker performance degradation",
+    "description": "Significant performance degradation in CIW eligibility checker. Response times increased from 200ms to 5000ms. Database queries show long execution times on providers table.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Run EXPLAIN on slow queries to identify missing indexes",
+      "2. Create composite index on members(column1, column2, column3)",
+      "3. Update table statistics: ANALYZE TABLE members",
+      "4. Optimize query to use index hints",
+      "5. Implement query result caching (Redis)",
+      "6. Add database connection pooling",
+      "7. Monitor query performance after changes"
+    ],
+    "priority": "High",
+    "created_date": "2025-08-08",
+    "resolution_time_hours": 4.7
+  },
+  {
+    "ticket_id": "JIRA-MM-003",
+    "title": "MM batch job failing with OutOfMemoryError",
+    "description": "Nightly MM batch processing job fails with OutOfMemoryError. Job processes 10000 records but crashes at random point. No clear pattern in failure timing.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Review application logs for stack trace",
+      "2. Increase JVM heap size: -Xmx4g -Xms2g",
+      "3. Implement batch processing with chunking (1000 records/batch)",
+      "4. Add null checks and error handling",
+      "5. Implement transaction boundaries per chunk",
+      "6. Add retry logic with exponential backoff",
+      "7. Run test with production data snapshot"
+    ],
+    "priority": "Low",
+    "created_date": "2025-09-29",
+    "resolution_time_hours": 44.2
+  },
+  {
+    "ticket_id": "JIRA-MM-025",
+    "title": "MM_ALDER service memory leak in background worker",
+    "description": "Memory usage grows continuously in background worker until service crashes. Heap dump shows retention of cache entry objects. Issue started after recent deployment.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER",
+      "#MMALDR"
+    ],
+    "resolution_steps": [
+      "1. Analyze heap dump: jmap -dump:live,format=b,file=heap.bin <pid>",
+      "2. Identify leak source in background worker",
+      "3. Add proper resource cleanup in finally blocks",
+      "4. Implement connection pooling with max age",
+      "5. Deploy fix and monitor memory usage",
+      "6. Set up alerts for memory threshold (>80%)"
+    ],
+    "priority": "Critical",
+    "created_date": "2025-08-12",
+    "resolution_time_hours": 3.0
+  },
+  {
+    "ticket_id": "JIRA-CI-029",
+    "title": "CIW integration failing to sync provider information",
+    "description": "CIW integration service unable to synchronize provider information from upstream system. Sync job completes but data not updated in target database. Last successful sync was 12 hours ago.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Check CIW integration service logs: tail -f /var/log/ciw/integration.log",
+      "2. Verify API credentials and authentication token",
+      "3. Test connectivity to upstream system endpoint",
+      "4. Validate data transformation logic",
+      "5. Clear stale records from staging table",
+      "6. Restart integration service",
+      "7. Manually trigger sync job and monitor"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-10-04",
+    "resolution_time_hours": 22.0
+  },
+  {
+    "ticket_id": "JIRA-MM-035",
+    "title": "MM batch job failing with NullPointerException",
+    "description": "Nightly MM batch processing job fails with NullPointerException. Job processes 250000 records but crashes at random point. No clear pattern in failure timing.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Review application logs for stack trace",
+      "2. Increase JVM heap size: -Xmx4g -Xms2g",
+      "3. Implement batch processing with chunking (1000 records/batch)",
+      "4. Add null checks and error handling",
+      "5. Implement transaction boundaries per chunk",
+      "6. Add retry logic with exponential backoff",
+      "7. Run test with production data snapshot"
+    ],
+    "priority": "High",
+    "created_date": "2025-05-20",
+    "resolution_time_hours": 5.7
+  },
+  {
+    "ticket_id": "JIRA-MM-027",
+    "title": "Database connection timeout in MM core service",
+    "description": "Users experiencing timeout errors when connecting to MM database through MM core service. Error occurs intermittently during peak hours. Connection pool may be exhausted.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Check database connection pool settings in /etc/mm/config.yaml",
+      "2. Increase max_connections from 100 to 200",
+      "3. Adjust connection timeout from 10s to 30s",
+      "4. Restart MM service: systemctl restart mm_alder",
+      "5. Monitor connection pool metrics for 24 hours"
+    ],
+    "priority": "High",
+    "created_date": "2025-08-21",
+    "resolution_time_hours": 2.5
+  },
+  {
+    "ticket_id": "JIRA-CI-035",
+    "title": "CIW authorization engine performance degradation",
+    "description": "Significant performance degradation in CIW authorization engine. Response times increased from 50ms to 2000ms. Database queries show long execution times on providers table.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Run EXPLAIN on slow queries to identify missing indexes",
+      "2. Create composite index on authorizations(column1, column2, column3)",
+      "3. Update table statistics: ANALYZE TABLE claims",
+      "4. Optimize query to use index hints",
+      "5. Implement query result caching (Redis)",
+      "6. Add database connection pooling",
+      "7. Monitor query performance after changes"
+    ],
+    "priority": "High",
+    "created_date": "2025-06-29",
+    "resolution_time_hours": 4.7
+  },
+  {
+    "ticket_id": "JIRA-MM-024",
+    "title": "MM integration API returning 504 errors",
+    "description": "MM REST API endpoints timing out with 504 Gateway Timeout errors. Affects /api/v1/patient/lookup endpoint primarily. Backend processing takes longer than 60s timeout limit.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix"
+    ],
+    "resolution_steps": [
+      "1. Increase nginx timeout: proxy_read_timeout 120s",
+      "2. Optimize database query in /api/v1/auth/verify handler",
+      "3. Add query index on frequently filtered columns",
+      "4. Implement response caching for read operations",
+      "5. Add asynchronous processing for long-running tasks",
+      "6. Test with production load simulator"
+    ],
+    "priority": "Low",
+    "created_date": "2025-06-01",
+    "resolution_time_hours": 32.1
+  },
+  {
+    "ticket_id": "JIRA-MM-039",
+    "title": "MM integration API returning 504 errors",
+    "description": "MM REST API endpoints timing out with 504 Gateway Timeout errors. Affects /api/v1/eligibility/check endpoint primarily. Backend processing takes longer than 60s timeout limit.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix"
+    ],
+    "resolution_steps": [
+      "1. Increase nginx timeout: proxy_read_timeout 120s",
+      "2. Optimize database query in /api/v1/claims/process handler",
+      "3. Add query index on frequently filtered columns",
+      "4. Implement response caching for read operations",
+      "5. Add asynchronous processing for long-running tasks",
+      "6. Test with production load simulator"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-09-11",
+    "resolution_time_hours": 20.6
+  },
+  {
+    "ticket_id": "JIRA-CI-021",
+    "title": "CIW data validation errors in provider enrollment",
+    "description": "CIW provider enrollment rejecting valid records with validation errors. Error message: 'Value out of range'. Validation logic too strict and rejecting legitimate edge cases.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Review validation rules in eligibility verification/validators.py",
+      "2. Analyze rejected records to identify pattern",
+      "3. Update validation regex to handle edge cases",
+      "4. Add exception handling for null/empty values",
+      "5. Implement validation bypass for admin users",
+      "6. Update unit tests with edge case scenarios",
+      "7. Deploy to staging and test with sample data",
+      "8. Monitor error rates after production deployment"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-10-08",
+    "resolution_time_hours": 12.3
+  },
+  {
+    "ticket_id": "JIRA-MM-029",
+    "title": "Database connection timeout in MM core service",
+    "description": "Users experiencing timeout errors when connecting to MM database through MM core service. Error occurs intermittently during peak hours. Connection pool may be exhausted.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Check database connection pool settings in /etc/mm/config.yaml",
+      "2. Increase max_connections from 100 to 200",
+      "3. Adjust connection timeout from 10s to 30s",
+      "4. Restart MM service: systemctl restart mm_alder",
+      "5. Monitor connection pool metrics for 24 hours"
+    ],
+    "priority": "Low",
+    "created_date": "2025-06-09",
+    "resolution_time_hours": 16.8
+  },
+  {
+    "ticket_id": "JIRA-CI-016",
+    "title": "CIW integration failing to sync provider information",
+    "description": "CIW integration service unable to synchronize provider information from upstream system. Sync job completes but data not updated in target database. Last successful sync was 12 hours ago.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Check CIW integration service logs: tail -f /var/log/ciw/integration.log",
+      "2. Verify API credentials and authentication token",
+      "3. Test connectivity to upstream system endpoint",
+      "4. Validate data transformation logic",
+      "5. Clear stale records from staging table",
+      "6. Restart integration service",
+      "7. Manually trigger sync job and monitor"
+    ],
+    "priority": "High",
+    "created_date": "2025-09-18",
+    "resolution_time_hours": 2.3
+  },
+  {
+    "ticket_id": "JIRA-Sp-015",
+    "title": "Specialty custom workflow failing at notification delivery",
+    "description": "Custom workflow for specialty processing fails at notification delivery step. Error: 'Missing required data'. Workflow engine shows step timeout after 60 seconds.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Review workflow definition in specialty/workflows/workflow_15.xml",
+      "2. Increase step timeout in workflow engine config",
+      "3. Add error handling and retry logic to approval routing",
+      "4. Verify external service dependencies are available",
+      "5. Implement async processing for long-running steps",
+      "6. Add workflow state persistence",
+      "7. Test workflow with production-like data",
+      "8. Enable detailed workflow execution logging"
+    ],
+    "priority": "Low",
+    "created_date": "2025-05-26",
+    "resolution_time_hours": 37.6
+  },
+  {
+    "ticket_id": "JIRA-CI-032",
+    "title": "CIW data validation errors in provider enrollment",
+    "description": "CIW provider enrollment rejecting valid records with validation errors. Error message: 'Required field missing'. Validation logic too strict and rejecting legitimate edge cases.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Review validation rules in eligibility verification/validators.py",
+      "2. Analyze rejected records to identify pattern",
+      "3. Update validation regex to handle edge cases",
+      "4. Add exception handling for null/empty values",
+      "5. Implement validation bypass for admin users",
+      "6. Update unit tests with edge case scenarios",
+      "7. Deploy to staging and test with sample data",
+      "8. Monitor error rates after production deployment"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-06-26",
+    "resolution_time_hours": 19.3
+  },
+  {
+    "ticket_id": "JIRA-CI-026",
+    "title": "CIW integration failing to sync patient demographics",
+    "description": "CIW integration service unable to synchronize patient demographics from upstream system. Sync job completes but data not updated in target database. Last successful sync was 24 hours ago.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Check CIW integration service logs: tail -f /var/log/ciw/integration.log",
+      "2. Verify API credentials and authentication token",
+      "3. Test connectivity to upstream system endpoint",
+      "4. Validate data transformation logic",
+      "5. Clear stale records from staging table",
+      "6. Restart integration service",
+      "7. Manually trigger sync job and monitor"
+    ],
+    "priority": "High",
+    "created_date": "2025-06-26",
+    "resolution_time_hours": 2.1
+  },
+  {
+    "ticket_id": "JIRA-MM-007",
+    "title": "Database connection timeout in MM data processor",
+    "description": "Users experiencing timeout errors when connecting to MM database through MM data processor. Error occurs intermittently during peak hours. Connection pool may be exhausted.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Check database connection pool settings in /etc/mm/config.yaml",
+      "2. Increase max_connections from 100 to 200",
+      "3. Adjust connection timeout from 10s to 30s",
+      "4. Restart MM service: systemctl restart mm_alder",
+      "5. Monitor connection pool metrics for 24 hours"
+    ],
+    "priority": "High",
+    "created_date": "2025-07-21",
+    "resolution_time_hours": 2.1
+  },
+  {
+    "ticket_id": "JIRA-CI-007",
+    "title": "CIW integration failing to sync authorization data",
+    "description": "CIW integration service unable to synchronize authorization data from upstream system. Sync job completes but data not updated in target database. Last successful sync was 12 hours ago.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Check CIW integration service logs: tail -f /var/log/ciw/integration.log",
+      "2. Verify API credentials and authentication token",
+      "3. Test connectivity to upstream system endpoint",
+      "4. Validate data transformation logic",
+      "5. Clear stale records from staging table",
+      "6. Restart integration service",
+      "7. Manually trigger sync job and monitor"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-09-16",
+    "resolution_time_hours": 17.4
+  },
+  {
+    "ticket_id": "JIRA-MM-001",
+    "title": "MM_ALDER service memory leak in background worker",
+    "description": "Memory usage grows continuously in background worker until service crashes. Heap dump shows retention of connection objects. Issue started after recent deployment.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER",
+      "#MMALDR"
+    ],
+    "resolution_steps": [
+      "1. Analyze heap dump: jmap -dump:live,format=b,file=heap.bin <pid>",
+      "2. Identify leak source in data processing pipeline",
+      "3. Add proper resource cleanup in finally blocks",
+      "4. Implement connection pooling with max age",
+      "5. Deploy fix and monitor memory usage",
+      "6. Set up alerts for memory threshold (>80%)"
+    ],
+    "priority": "High",
+    "created_date": "2025-05-23",
+    "resolution_time_hours": 4.1
+  },
+  {
+    "ticket_id": "JIRA-MM-008",
+    "title": "MM integration API returning 504 errors",
+    "description": "MM REST API endpoints timing out with 504 Gateway Timeout errors. Affects /api/v1/eligibility/check endpoint primarily. Backend processing takes longer than 60s timeout limit.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix"
+    ],
+    "resolution_steps": [
+      "1. Increase nginx timeout: proxy_read_timeout 120s",
+      "2. Optimize database query in /api/v1/claims/process handler",
+      "3. Add query index on frequently filtered columns",
+      "4. Implement response caching for read operations",
+      "5. Add asynchronous processing for long-running tasks",
+      "6. Test with production load simulator"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-08-09",
+    "resolution_time_hours": 20.4
+  },
+  {
+    "ticket_id": "JIRA-Sp-002",
+    "title": "Specialty report generation incorrect data",
+    "description": "Custom specialty reports experiencing incorrect data. Affects financial reports. Users unable to access critical business data. Report server load is at 95%.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Data Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Optimize report query to reduce data fetch time",
+      "2. Add database query pagination (1000 rows/page)",
+      "3. Implement report caching for frequently accessed reports",
+      "4. Create database materialized view for aggregations",
+      "5. Add background job queue for large report generation",
+      "6. Optimize report template rendering logic",
+      "7. Scale report server horizontally (add 2 more instances)",
+      "8. Monitor server metrics after optimization"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-06-23",
+    "resolution_time_hours": 9.6
+  },
+  {
+    "ticket_id": "JIRA-MM-005",
+    "title": "MM batch job failing with OutOfMemoryError",
+    "description": "Nightly MM batch processing job fails with OutOfMemoryError. Job processes 10000 records but crashes at random point. No clear pattern in failure timing.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Review application logs for stack trace",
+      "2. Increase JVM heap size: -Xmx4g -Xms2g",
+      "3. Implement batch processing with chunking (1000 records/batch)",
+      "4. Add null checks and error handling",
+      "5. Implement transaction boundaries per chunk",
+      "6. Add retry logic with exponential backoff",
+      "7. Run test with production data snapshot"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-11-04",
+    "resolution_time_hours": 9.0
+  },
+  {
+    "ticket_id": "JIRA-Sp-024",
+    "title": "Specialty report generation generation failures",
+    "description": "Custom specialty reports experiencing generation failures. Affects operational reports. Users unable to access critical business data. Report server load is at 85%.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Data Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Optimize report query to reduce data fetch time",
+      "2. Add database query pagination (1000 rows/page)",
+      "3. Implement report caching for frequently accessed reports",
+      "4. Create database materialized view for aggregations",
+      "5. Add background job queue for large report generation",
+      "6. Optimize report template rendering logic",
+      "7. Scale report server horizontally (add 2 more instances)",
+      "8. Monitor server metrics after optimization"
+    ],
+    "priority": "High",
+    "created_date": "2025-05-22",
+    "resolution_time_hours": 2.4
+  },
+  {
+    "ticket_id": "JIRA-CI-018",
+    "title": "CIW integration failing to sync authorization data",
+    "description": "CIW integration service unable to synchronize authorization data from upstream system. Sync job completes but data not updated in target database. Last successful sync was 48 hours ago.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Check CIW integration service logs: tail -f /var/log/ciw/integration.log",
+      "2. Verify API credentials and authentication token",
+      "3. Test connectivity to upstream system endpoint",
+      "4. Validate data transformation logic",
+      "5. Clear stale records from staging table",
+      "6. Restart integration service",
+      "7. Manually trigger sync job and monitor"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-06-23",
+    "resolution_time_hours": 10.0
+  },
+  {
+    "ticket_id": "JIRA-Sp-005",
+    "title": "Specialty analytics widget module not loading correctly",
+    "description": "Custom analytics widget module in specialty application fails to load on startup. Browser console shows Module not found. Module worked correctly before latest release.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Check browser console for detailed error stack trace",
+      "2. Verify module dependencies in package.json",
+      "3. Clear browser cache and CDN cache",
+      "4. Check webpack build for missing chunks",
+      "5. Verify module export/import statements",
+      "6. Rebuild frontend: npm run build",
+      "7. Test in multiple browsers",
+      "8. Deploy fixed version to production"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-05-19",
+    "resolution_time_hours": 13.7
+  },
+  {
+    "ticket_id": "JIRA-Sp-006",
+    "title": "Specialty custom workflow failing at document generation",
+    "description": "Custom workflow for specialty processing fails at document generation step. Error: 'Invalid state transition'. Workflow engine shows step timeout after 120 seconds.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Review workflow definition in specialty/workflows/workflow_6.xml",
+      "2. Increase step timeout in workflow engine config",
+      "3. Add error handling and retry logic to approval routing",
+      "4. Verify external service dependencies are available",
+      "5. Implement async processing for long-running steps",
+      "6. Add workflow state persistence",
+      "7. Test workflow with production-like data",
+      "8. Enable detailed workflow execution logging"
+    ],
+    "priority": "Critical",
+    "created_date": "2025-09-10",
+    "resolution_time_hours": 3.3
+  },
+  {
+    "ticket_id": "JIRA-MM-012",
+    "title": "MM batch job failing with OutOfMemoryError",
+    "description": "Nightly MM batch processing job fails with OutOfMemoryError. Job processes 250000 records but crashes at random point. No clear pattern in failure timing.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Review application logs for stack trace",
+      "2. Increase JVM heap size: -Xmx4g -Xms2g",
+      "3. Implement batch processing with chunking (1000 records/batch)",
+      "4. Add null checks and error handling",
+      "5. Implement transaction boundaries per chunk",
+      "6. Add retry logic with exponential backoff",
+      "7. Run test with production data snapshot"
+    ],
+    "priority": "Low",
+    "created_date": "2025-09-24",
+    "resolution_time_hours": 18.9
+  },
+  {
+    "ticket_id": "JIRA-CI-028",
+    "title": "CIW eligibility checker performance degradation",
+    "description": "Significant performance degradation in CIW eligibility checker. Response times increased from 100ms to 3000ms. Database queries show long execution times on claims table.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Run EXPLAIN on slow queries to identify missing indexes",
+      "2. Create composite index on providers(column1, column2, column3)",
+      "3. Update table statistics: ANALYZE TABLE members",
+      "4. Optimize query to use index hints",
+      "5. Implement query result caching (Redis)",
+      "6. Add database connection pooling",
+      "7. Monitor query performance after changes"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-08-05",
+    "resolution_time_hours": 4.4
+  },
+  {
+    "ticket_id": "JIRA-CI-015",
+    "title": "CIW eligibility checker performance degradation",
+    "description": "Significant performance degradation in CIW eligibility checker. Response times increased from 50ms to 5000ms. Database queries show long execution times on members table.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Run EXPLAIN on slow queries to identify missing indexes",
+      "2. Create composite index on authorizations(column1, column2, column3)",
+      "3. Update table statistics: ANALYZE TABLE authorizations",
+      "4. Optimize query to use index hints",
+      "5. Implement query result caching (Redis)",
+      "6. Add database connection pooling",
+      "7. Monitor query performance after changes"
+    ],
+    "priority": "Critical",
+    "created_date": "2025-10-07",
+    "resolution_time_hours": 1.4
+  },
+  {
+    "ticket_id": "JIRA-MM-036",
+    "title": "MM batch job failing with OutOfMemoryError",
+    "description": "Nightly MM batch processing job fails with OutOfMemoryError. Job processes 50000 records but crashes at random point. No clear pattern in failure timing.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Review application logs for stack trace",
+      "2. Increase JVM heap size: -Xmx4g -Xms2g",
+      "3. Implement batch processing with chunking (1000 records/batch)",
+      "4. Add null checks and error handling",
+      "5. Implement transaction boundaries per chunk",
+      "6. Add retry logic with exponential backoff",
+      "7. Run test with production data snapshot"
+    ],
+    "priority": "Critical",
+    "created_date": "2025-06-14",
+    "resolution_time_hours": 1.3
+  },
+  {
+    "ticket_id": "JIRA-CI-020",
+    "title": "CIW provider lookup performance degradation",
+    "description": "Significant performance degradation in CIW provider lookup. Response times increased from 50ms to 3000ms. Database queries show long execution times on members table.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "Configuration Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Run EXPLAIN on slow queries to identify missing indexes",
+      "2. Create composite index on members(column1, column2, column3)",
+      "3. Update table statistics: ANALYZE TABLE providers",
+      "4. Optimize query to use index hints",
+      "5. Implement query result caching (Redis)",
+      "6. Add database connection pooling",
+      "7. Monitor query performance after changes"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-10-11",
+    "resolution_time_hours": 5.2
+  },
+  {
+    "ticket_id": "JIRA-CI-008",
+    "title": "CIW integration failing to sync patient demographics",
+    "description": "CIW integration service unable to synchronize patient demographics from upstream system. Sync job completes but data not updated in target database. Last successful sync was 24 hours ago.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Check CIW integration service logs: tail -f /var/log/ciw/integration.log",
+      "2. Verify API credentials and authentication token",
+      "3. Test connectivity to upstream system endpoint",
+      "4. Validate data transformation logic",
+      "5. Clear stale records from staging table",
+      "6. Restart integration service",
+      "7. Manually trigger sync job and monitor"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-06-27",
+    "resolution_time_hours": 6.4
+  },
+  {
+    "ticket_id": "JIRA-MM-030",
+    "title": "Database connection timeout in MM_ALDER module",
+    "description": "Users experiencing timeout errors when connecting to MM database through MM_ALDER module. Error occurs intermittently during peak hours. Connection pool may be exhausted.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Check database connection pool settings in /etc/mm/config.yaml",
+      "2. Increase max_connections from 100 to 200",
+      "3. Adjust connection timeout from 10s to 30s",
+      "4. Restart MM service: systemctl restart mm_alder",
+      "5. Monitor connection pool metrics for 24 hours"
+    ],
+    "priority": "High",
+    "created_date": "2025-07-22",
+    "resolution_time_hours": 2.7
+  },
+  {
+    "ticket_id": "JIRA-Sp-020",
+    "title": "Specialty report generation generation failures",
+    "description": "Custom specialty reports experiencing generation failures. Affects operational reports. Users unable to access critical business data. Report server load is at 95%.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Data Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Optimize report query to reduce data fetch time",
+      "2. Add database query pagination (1000 rows/page)",
+      "3. Implement report caching for frequently accessed reports",
+      "4. Create database materialized view for aggregations",
+      "5. Add background job queue for large report generation",
+      "6. Optimize report template rendering logic",
+      "7. Scale report server horizontally (add 2 more instances)",
+      "8. Monitor server metrics after optimization"
+    ],
+    "priority": "High",
+    "created_date": "2025-10-09",
+    "resolution_time_hours": 2.7
+  },
+  {
+    "ticket_id": "JIRA-Sp-018",
+    "title": "Specialty report generation generation failures",
+    "description": "Custom specialty reports experiencing generation failures. Affects analytics reports. Users unable to access critical business data. Report server load is at 85%.",
+    "domain": "Specialty",
+    "labels": [
+      "Code Fix",
+      "Data Fix",
+      "#SPECIALTY_CUSTOM"
+    ],
+    "resolution_steps": [
+      "1. Optimize report query to reduce data fetch time",
+      "2. Add database query pagination (1000 rows/page)",
+      "3. Implement report caching for frequently accessed reports",
+      "4. Create database materialized view for aggregations",
+      "5. Add background job queue for large report generation",
+      "6. Optimize report template rendering logic",
+      "7. Scale report server horizontally (add 2 more instances)",
+      "8. Monitor server metrics after optimization"
+    ],
+    "priority": "High",
+    "created_date": "2025-09-18",
+    "resolution_time_hours": 3.4
+  },
+  {
+    "ticket_id": "JIRA-MM-037",
+    "title": "MM batch job failing with SQLException",
+    "description": "Nightly MM batch processing job fails with SQLException. Job processes 50000 records but crashes at random point. No clear pattern in failure timing.",
+    "domain": "MM",
+    "labels": [
+      "Code Fix",
+      "#MM_ALDER"
+    ],
+    "resolution_steps": [
+      "1. Review application logs for stack trace",
+      "2. Increase JVM heap size: -Xmx4g -Xms2g",
+      "3. Implement batch processing with chunking (1000 records/batch)",
+      "4. Add null checks and error handling",
+      "5. Implement transaction boundaries per chunk",
+      "6. Add retry logic with exponential backoff",
+      "7. Run test with production data snapshot"
+    ],
+    "priority": "Medium",
+    "created_date": "2025-06-28",
+    "resolution_time_hours": 23.9
+  },
+  {
+    "ticket_id": "JIRA-CI-002",
+    "title": "CIW data validation errors in eligibility verification",
+    "description": "CIW eligibility verification rejecting valid records with validation errors. Error message: 'Value out of range'. Validation logic too strict and rejecting legitimate edge cases.",
+    "domain": "CIW",
+    "labels": [
+      "Code Fix",
+      "#CIW_INTEGRATION"
+    ],
+    "resolution_steps": [
+      "1. Review validation rules in member registration/validators.py",
+      "2. Analyze rejected records to identify pattern",
+      "3. Update validation regex to handle edge cases",
+      "4. Add exception handling for null/empty values",
+      "5. Implement validation bypass for admin users",
+      "6. Update unit tests with edge case scenarios",
+      "7. Deploy to staging and test with sample data",
+      "8. Monitor error rates after production deployment"
+    ],
+    "priority": "Low",
+    "created_date": "2025-05-26",
+    "resolution_time_hours": 63.0
+  }
+]
