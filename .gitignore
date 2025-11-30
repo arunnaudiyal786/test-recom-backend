@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+data/faiss_index/*.index
+data/faiss_index/metadata.json
+data/processed/*.csv
+data/processed/*.json
+output/*.json
+output/*.csv
+output/*.png
+
+# Logs
+*.log
+logs/
