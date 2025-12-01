@@ -38,6 +38,10 @@ class Config:
         "FAISS_METADATA_PATH", "data/faiss_index/metadata.json"
     )
 
+    # Data Source Configuration
+    HISTORICAL_TICKETS_CSV = os.getenv("HISTORICAL_TICKETS_CSV", "historical_tickets.csv")
+    HISTORICAL_TICKETS_PATH = PROJECT_ROOT / "data" / "raw" / HISTORICAL_TICKETS_CSV
+
     # Processing Configuration
     TOP_K_SIMILAR_TICKETS = int(os.getenv("TOP_K_SIMILAR_TICKETS", "20"))
     CLASSIFICATION_CONFIDENCE_THRESHOLD = float(

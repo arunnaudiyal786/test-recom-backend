@@ -1,6 +1,7 @@
 # Core
 python-dotenv==1.0.0
 pydantic>=2.7.4
+pydantic-settings>=2.0.0  # For component configuration management
 
 # LangGraph & LangChain
 langgraph==0.2.34
@@ -27,3 +28,6 @@ uvicorn>=0.32.0
 # Utilities
 tqdm==4.66.1
 python-json-logger==2.0.7
+
+# Configuration
+PyYAML>=6.0.1

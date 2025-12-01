@@ -44,63 +44,88 @@ python3 scripts/generate_sample_csv_data.py
 python3 scripts/setup_vectorstore.py
 ```
 
-## Architecture: Multi-Agent Pipeline
+## Architecture: LangChain Agents + LangGraph Orchestration
 
-### Core Workflow (Sequential, Not Parallel)
+### Project Structure
+
+```
+test-recom-backend/
+├── components/                    # LangChain agent components
+│   ├── classification/            # Domain classification agent
+│   │   ├── tools.py              # @tool decorated functions
+│   │   ├── agent.py              # LangGraph node function
+│   │   └── service.py            # Legacy service (backward compat)
+│   ├── retrieval/                 # Pattern recognition agent (FAISS)
+│   ├── labeling/                  # Label assignment agent
+│   ├── resolution/                # Resolution generation agent
+│   └── embedding/                 # Embedding service (utility)
+│
+├── src/
+│   ├── orchestrator/              # LangGraph workflow orchestration
+│   │   ├── state.py              # TicketWorkflowState TypedDict
+│   │   └── workflow.py           # StateGraph definition
+│   └── ...
+```
+
+### Core Workflow (Sequential Pipeline)
 
 The system implements a **strict sequential pipeline** via LangGraph:
 
 ```
-Classification Agent
+Classification Agent (components/classification/)
     ↓ (domain: MM/CIW/Specialty)
-Pattern Recognition Agent
+Retrieval Agent (components/retrieval/)
     ↓ (top 20 similar tickets from FAISS)
-Label Assignment Agent
+Labeling Agent (components/labeling/)
     ↓ (assigned labels based on historical patterns)
-Resolution Generation Agent
+Resolution Agent (components/resolution/)
     ↓
 Final Output (JSON)
 ```
 
 **Critical**: Each agent MUST complete successfully before the next starts. The workflow uses **conditional routing** - on error, it routes directly to the error handler for manual escalation.
 
-### State Management Pattern
+### LangChain Tool Pattern
 
-This system uses **TypedDict-based state** (not Pydantic models) for LangGraph:
-
-- **TicketState** (`src/models/state_schema.py`): Main workflow state with `total=False` for partial updates
-- **AgentOutput**: Standard return type for all agents (partial state dict)
-- **Annotated fields**: `messages` field uses `Annotated[List[Dict], operator.add]` for accumulation across agents
-
-**Key insight**: Agents return **partial state dicts** that get merged into the full state, NOT complete TicketState objects.
-
-### Agent Implementation Pattern
-
-All agents follow this structure:
+Each agent component uses LangChain's `@tool` decorator:
 
 ```python
-class SomeAgent:
-    async def __call__(self, state: TicketState) -> AgentOutput:
-        try:
-            # 1. Extract inputs from state
-            # 2. Process with OpenAI/FAISS
-            # 3. Return partial state update
-            return {
-                "status": "success",
-                "current_agent": "agent_name",
-                "agent_specific_field": result,
-                "messages": [{"role": "assistant", "content": "..."}]
-            }
-        except Exception as e:
-            # 4. Return error state for manual escalation
-            return {
-                "status": "error",
-                "current_agent": "agent_name",
-                "error_message": str(e)
-            }
+from langchain_core.tools import tool
+
+@tool
+async def classify_ticket_domain(title: str, description: str) -> Dict[str, Any]:
+    """Classify a ticket into MM, CIW, or Specialty domain."""
+    # Implementation...
+    return {"classified_domain": "MM", "confidence": 0.95}
 ```
 
-**Global singleton pattern**: Each agent is instantiated once at module level (e.g., `classification_agent = ClassificationAgent()`)
+### LangGraph Node Pattern
+
+Tools are wrapped in node functions for LangGraph:
+
+```python
+async def classification_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """LangGraph node for domain classification."""
+    result = await classify_ticket_domain.ainvoke({
+        "title": state["title"],
+        "description": state["description"]
+    })
+    return {
+        "classified_domain": result["classified_domain"],
+        "classification_confidence": result["confidence"],
+        "status": "success",
+        "current_agent": "classification"
+    }
+```
+
+### State Management Pattern
+
+This system uses **TypedDict-based state** for LangGraph:
+
+- **TicketWorkflowState** (`src/orchestrator/state.py`): Main workflow state with `total=False` for partial updates
+- **Annotated fields**: `messages` field uses `Annotated[List[Dict], operator.add]` for accumulation across agents
+
+**Key insight**: Agents return **partial state dicts** that get merged into the full state, NOT complete state objects.
 
 ## Critical System Components
 

@@ -1,0 +1,346 @@
+# Schema Configuration for Test Recommendation System
+# This file defines how CSV data is mapped to the system's internal model
+
+# Data source type: determines which parsing logic to use
+# Supported types: 'historical_tickets' | 'test_plan'
+data_source_type: test_plan
+
+# =============================================================================
+# COLUMN MAPPINGS
+# Map your CSV columns to the system's expected fields
+# =============================================================================
+
+column_mappings:
+  # Required fields - these must exist in your CSV
+  ticket_id: Issue_Key          # Unique identifier for each record
+  title: Summary                # Short title/summary
+  description: Description      # Detailed description
+
+  # Optional fields - set to null if not available in your CSV
+  priority: null                # Will be derived from story_points if null
+  resolution_steps: Expected_Result  # Steps for resolution (can be null)
+  created_date: null            # Created date column (can be null)
+  closed_date: null             # Closed date column (can be null)
+  issue_type: Type              # Type of issue (can be null)
+  assignee: Labels6             # Person assigned (can be null)
+  team: Labels3                 # Team name (can be null)
+  reporter: null                # Reporter email (can be null)
+
+  # Test plan specific fields (optional)
+  precondition: Precondition
+  test_steps: Test_Step_Description
+  expected_result: Expected_Result
+  story_points: Story_Points
+  status: Status
+
+# =============================================================================
+# LABEL CONFIGURATION
+# Define which columns contain labels and how to process them
+# =============================================================================
+
+labels:
+  # Columns that contain label values (will be combined into a single list)
+  columns:
+    - Labels2    # Domain code (BL-CORE, EN-ENROLL, etc.)
+    - Labels3    # Team name (BillingTeam, etc.)
+    - Labels4    # DoR status, etc.
+    - Labels5    # Component name (CoreBilling, etc.)
+    - Labels6    # QA Lead
+    - Labels7    # Architect
+    - Labels8    # Environment (PROD, STAGE)
+    - Labels9    # Refinement status
+
+  # Columns to EXCLUDE from labels (even if they start with "Label")
+  exclude_columns:
+    - Labels     # This contains story IDs, not labels
+
+# =============================================================================
+# DOMAIN CONFIGURATION
+# Define the domains used for classification
+# =============================================================================
+
+domains:
+  # Domain extraction: which column determines the domain?
+  extraction_column: Labels2
+
+  # Mapping from column values to domain names
+  # Format: csv_value: domain_name
+  domain_map:
+    BL-CORE: Billing
+    EN-ENROLL: Enrollment
+    CL-CLAIMS: Claims
+    PR-PREMIUM: Premium
+    RN-RENEWAL: Renewal
+    IN-INTEGRATION: Integration
+    RP-REPORTING: Reporting
+    CS-CUSTSERV: CustomerService
+    SEC-SECURITY: Security
+    PF-PERFORMANCE: Performance
+
+  # Domain definitions with display info and classification prompts
+  definitions:
+    Billing:
+      full_name: "Core Billing Services"
+      description: "Billing operations, invoicing, payment processing, AWD setup"
+      color_scheme: blue
+      classification_prompt: |
+        You are an AI classifier for Billing domain test cases in a healthcare system.
+
+        This domain covers:
+        - Invoice generation and billing cycles
+        - Payment processing (AWD - Auto Withdrawal Debit)
+        - Premium calculations and rate changes
+        - NSF (Non-Sufficient Funds) handling
+        - Refund processing
+        - Multi-contract billing consolidation
+
+        Classify as Billing if the test case involves billing operations,
+        payment methods, or financial transactions.
+
+    Enrollment:
+      full_name: "Member Enrollment Services"
+      description: "Member enrollment, family plans, COBRA, SEP, dependent management"
+      color_scheme: green
+      classification_prompt: |
+        You are an AI classifier for Enrollment domain test cases in a healthcare system.
+
+        This domain covers:
+        - New member enrollment
+        - Family plan setup
+        - Dependent additions (newborn, spouse)
+        - COBRA continuation
+        - Special Enrollment Period (SEP) due to QLE
+        - Retroactive enrollment
+        - Plan changes and migrations
+
+        Classify as Enrollment if the test case involves member enrollment,
+        plan selection, or coverage management.
+
+    Claims:
+      full_name: "Claims Processing"
+      description: "Claims submission, adjudication, COB, denials, EOB generation"
+      color_scheme: purple
+      classification_prompt: |
+        You are an AI classifier for Claims domain test cases in a healthcare system.
+
+        This domain covers:
+        - Claims submission and validation
+        - Claims adjudication
+        - Coordination of Benefits (COB)
+        - Claims denial handling
+        - EOB (Explanation of Benefits) generation
+        - Grace period claim processing
+        - Preventive care coverage validation
+
+        Classify as Claims if the test case involves claims processing,
+        payment to providers, or benefit determination.
+
+    Premium:
+      full_name: "Premium Calculation"
+      description: "Premium rates, subsidies, rate changes, APTC calculations"
+      color_scheme: amber
+      classification_prompt: |
+        You are an AI classifier for Premium domain test cases in a healthcare system.
+
+        This domain covers:
+        - Premium rate calculations
+        - Rate change processing
+        - APTC (Advanced Premium Tax Credit) subsidies
+        - Premium breakdown and allocation
+        - 1095-A form data accuracy
+
+        Classify as Premium if the test case involves premium calculations,
+        subsidies, or rate management.
+
+    Renewal:
+      full_name: "Renewal Processing"
+      description: "Annual renewals, plan migrations, AWD continuation"
+      color_scheme: orange
+      classification_prompt: |
+        You are an AI classifier for Renewal domain test cases in a healthcare system.
+
+        This domain covers:
+        - Annual renewal processing
+        - Plan change at renewal
+        - AWD continuation through renewal
+        - Coverage gap prevention
+        - Year-over-year transitions
+
+        Classify as Renewal if the test case involves annual renewals
+        or year-end/year-start transitions.
+
+    Integration:
+      full_name: "System Integration"
+      description: "EDI transactions, payment gateway, external system interfaces"
+      color_scheme: cyan
+      classification_prompt: |
+        You are an AI classifier for Integration domain test cases in a healthcare system.
+
+        This domain covers:
+        - EDI 834 enrollment transactions
+        - Payment gateway integration
+        - ACH file generation and processing
+        - Trading partner communication
+        - External system interfaces
+
+        Classify as Integration if the test case involves system integration,
+        data exchange, or external interfaces.
+
+    Reporting:
+      full_name: "Analytics & Reporting"
+      description: "Dashboards, reconciliation reports, data analytics"
+      color_scheme: indigo
+      classification_prompt: |
+        You are an AI classifier for Reporting domain test cases in a healthcare system.
+
+        This domain covers:
+        - Dashboard accuracy
+        - Reconciliation reports
+        - Data export and analytics
+        - Report scheduling and distribution
+        - Metric calculations
+
+        Classify as Reporting if the test case involves reports,
+        dashboards, or data analytics.
+
+    CustomerService:
+      full_name: "Customer Service"
+      description: "CSR portal, member support, account updates"
+      color_scheme: pink
+      classification_prompt: |
+        You are an AI classifier for CustomerService domain test cases in a healthcare system.
+
+        This domain covers:
+        - Customer service portal functionality
+        - Member account updates via CSR
+        - AWD banking detail changes
+        - Cancellation request processing
+        - Member support workflows
+
+        Classify as CustomerService if the test case involves CSR operations
+        or member support processes.
+
+    Security:
+      full_name: "Security & Compliance"
+      description: "Data encryption, RBAC, PCI-DSS compliance, audit trails"
+      color_scheme: red
+      classification_prompt: |
+        You are an AI classifier for Security domain test cases in a healthcare system.
+
+        This domain covers:
+        - Data encryption (at rest and in transit)
+        - Role-based access control (RBAC)
+        - PCI-DSS compliance
+        - Audit logging
+        - Key rotation
+        - Authorization testing
+
+        Classify as Security if the test case involves security controls,
+        compliance, or access management.
+
+    Performance:
+      full_name: "Performance Testing"
+      description: "Load testing, batch processing SLAs, throughput benchmarks"
+      color_scheme: slate
+      classification_prompt: |
+        You are an AI classifier for Performance domain test cases in a healthcare system.
+
+        This domain covers:
+        - Batch processing performance
+        - Load testing and throughput
+        - SLA compliance
+        - Processing time benchmarks
+        - Error rate monitoring under load
+
+        Classify as Performance if the test case involves performance testing,
+        load testing, or SLA validation.
+
+# =============================================================================
+# PRIORITY CONFIGURATION
+# Define how priority is determined
+# =============================================================================
+
+priority:
+  # If a priority column doesn't exist, derive from story_points
+  derive_from: story_points
+
+  # Story points to priority mapping
+  story_points_map:
+    low_max: 8        # <= 8 points = Low
+    medium_max: 21    # <= 21 points = Medium
+    high_max: 34      # <= 34 points = High
+    # > 34 points = Critical
+
+  # Valid priority values
+  valid_values:
+    - Low
+    - Medium
+    - High
+    - Critical
+
+# =============================================================================
+# UI CONFIGURATION
+# Frontend display settings
+# =============================================================================
+
+ui:
+  # Color schemes for domains (used by frontend)
+  color_schemes:
+    blue:
+      bg: "bg-blue-50 dark:bg-blue-950"
+      text: "text-blue-700 dark:text-blue-300"
+      border: "border-blue-200 dark:border-blue-800"
+      icon: "text-blue-600 dark:text-blue-400"
+    green:
+      bg: "bg-green-50 dark:bg-green-950"
+      text: "text-green-700 dark:text-green-300"
+      border: "border-green-200 dark:border-green-800"
+      icon: "text-green-600 dark:text-green-400"
+    purple:
+      bg: "bg-purple-50 dark:bg-purple-950"
+      text: "text-purple-700 dark:text-purple-300"
+      border: "border-purple-200 dark:border-purple-800"
+      icon: "text-purple-600 dark:text-purple-400"
+    amber:
+      bg: "bg-amber-50 dark:bg-amber-950"
+      text: "text-amber-700 dark:text-amber-300"
+      border: "border-amber-200 dark:border-amber-800"
+      icon: "text-amber-600 dark:text-amber-400"
+    orange:
+      bg: "bg-orange-50 dark:bg-orange-950"
+      text: "text-orange-700 dark:text-orange-300"
+      border: "border-orange-200 dark:border-orange-800"
+      icon: "text-orange-600 dark:text-orange-400"
+    cyan:
+      bg: "bg-cyan-50 dark:bg-cyan-950"
+      text: "text-cyan-700 dark:text-cyan-300"
+      border: "border-cyan-200 dark:border-cyan-800"
+      icon: "text-cyan-600 dark:text-cyan-400"
+    indigo:
+      bg: "bg-indigo-50 dark:bg-indigo-950"
+      text: "text-indigo-700 dark:text-indigo-300"
+      border: "border-indigo-200 dark:border-indigo-800"
+      icon: "text-indigo-600 dark:text-indigo-400"
+    pink:
+      bg: "bg-pink-50 dark:bg-pink-950"
+      text: "text-pink-700 dark:text-pink-300"
+      border: "border-pink-200 dark:border-pink-800"
+      icon: "text-pink-600 dark:text-pink-400"
+    red:
+      bg: "bg-red-50 dark:bg-red-950"
+      text: "text-red-700 dark:text-red-300"
+      border: "border-red-200 dark:border-red-800"
+      icon: "text-red-600 dark:text-red-400"
+    slate:
+      bg: "bg-slate-100 dark:bg-slate-800"
+      text: "text-slate-700 dark:text-slate-300"
+      border: "border-slate-200 dark:border-slate-700"
+      icon: "text-slate-600 dark:text-slate-400"
+
+  # Example ticket for the UI
+  sample_ticket_placeholder: |
+    Enter test case description here...
+
+    Example:
+    Verify AWD payment processing when member enrolls in family plan.
+    Setup includes primary member and 2 dependents with combined premium.

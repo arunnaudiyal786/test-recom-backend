@@ -195,7 +195,7 @@ def format_confidence_scores(scores: Dict[str, float]) -> str:
 
 def validate_domain(domain: str) -> bool:
     """
-    Validate that domain is one of the allowed values.
+    Validate that domain is one of the allowed values from config.
 
     Args:
         domain: Domain string to validate
@@ -203,13 +203,15 @@ def validate_domain(domain: str) -> bool:
     Returns:
         True if valid, False otherwise
     """
-    valid_domains = {"MM", "CIW", "Specialty"}
+    from src.utils.schema_config import get_schema_config
+    schema_config = get_schema_config()
+    valid_domains = set(schema_config.domain_names)
     return domain in valid_domains
 
 
 def validate_priority(priority: str) -> bool:
     """
-    Validate that priority is one of the allowed values.
+    Validate that priority is one of the allowed values from config.
 
     Args:
         priority: Priority string to validate
@@ -217,5 +219,7 @@ def validate_priority(priority: str) -> bool:
     Returns:
         True if valid, False otherwise
     """
-    valid_priorities = {"Low", "Medium", "High", "Critical"}
+    from src.utils.schema_config import get_schema_config
+    schema_config = get_schema_config()
+    valid_priorities = set(schema_config.valid_priorities)
     return priority in valid_priorities

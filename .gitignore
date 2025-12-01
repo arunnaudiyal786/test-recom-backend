@@ -7,30 +7,55 @@ __pycache__/
 .venv/
 venv/
 ENV/
+env/
 .eggs/
 *.egg-info/
+*.egg
 dist/
 build/
+develop-eggs/
+downloads/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+.installed.cfg
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
 
 # Environment
 .env
 .env.local
+.env.*.local
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Project specific
+# Project specific - Data
 data/faiss_index/*.index
 data/faiss_index/metadata.json
 data/processed/*.csv
 data/processed/*.json
+data/raw/*.json
+
+# Project specific - Output
 output/*.json
 output/*.csv
 output/*.png
@@ -38,3 +63,6 @@ output/*.png
 # Logs
 *.log
 logs/
+
+# Misc
+.claude/

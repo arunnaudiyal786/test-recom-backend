@@ -14,8 +14,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 
-from src.graph.workflow import get_workflow
-from src.models.state_schema import TicketState
+# Use new LangGraph orchestrator from src/orchestrator
+from src.orchestrator.workflow import get_workflow, SKIP_DOMAIN_CLASSIFICATION
+from src.orchestrator.state import TicketWorkflowState as TicketState
 from src.utils.csv_exporter import export_ticket_results_to_csv
 from src.models.retrieval_config import (
     RetrievalConfig,
@@ -24,8 +25,18 @@ from src.models.retrieval_config import (
     SimilarTicketPreview,
     SearchMetadata
 )
-from src.agents.pattern_recognition_agent import pattern_recognition_agent
-from src.agents.classification_agent import classification_agent
+
+# Import agents from components (LangChain-style)
+from components.retrieval.agent import pattern_recognition_agent
+from components.classification.agent import classification_agent
+from components.classification.tools import classify_ticket_domain
+
+# Import v2 component routers (for individual component HTTP access)
+from components.embedding import router as embedding_router
+from components.retrieval import router as retrieval_router
+from components.classification import router as classification_router
+from components.labeling import router as labeling_router
+# Note: augmentation is now part of resolution, orchestrator is in src/orchestrator
 
 
 app = FastAPI(
@@ -42,6 +53,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ============================================================================
+# Mount v2 Component Routers
+# ============================================================================
+# Each component is self-contained and can be used:
+# 1. Via HTTP endpoints (mounted here)
+# 2. As Python modules (import from components.*)
+#
+# API Structure:
+#   /v2/embedding/*      - Embedding generation
+#   /v2/retrieval/*      - Similar ticket search
+#   /v2/classification/* - Domain classification
+#   /v2/labeling/*       - Label assignment
+#
+# Note: Full pipeline orchestration uses /api/process-ticket (LangGraph-based)
+#       Resolution generation is integrated into the pipeline workflow
+
+app.include_router(embedding_router, prefix="/v2")
+app.include_router(retrieval_router, prefix="/v2")
+app.include_router(classification_router, prefix="/v2")
+app.include_router(labeling_router, prefix="/v2")
 
 
 class TicketInput(BaseModel):
@@ -86,27 +118,47 @@ async def stream_agent_updates(ticket: TicketInput) -> AsyncGenerator[str, None]
             except Exception as e:
                 print(f"Warning: Could not load search config: {e}")
 
-        # Create initial state
-        initial_state: TicketState = {
-            "ticket_id": ticket.ticket_id,
-            "title": ticket.title,
-            "description": ticket.description,
-            "priority": ticket.priority,
-            "metadata": ticket.metadata,
-            "search_config": search_config,  # Include custom search config if saved
-            "processing_stage": "classification",
-            "status": "processing",
-            "current_agent": "Domain Classification Agent",
-            "messages": [],
-        }
-
-        # Agent names for progress tracking
-        agents = [
-            "Domain Classification Agent",
-            "Pattern Recognition Agent",
-            "Label Assignment Agent",
-            "Resolution Generation Agent"
-        ]
+        # Create initial state - adjust based on whether classification is skipped
+        if SKIP_DOMAIN_CLASSIFICATION:
+            initial_state: TicketState = {
+                "ticket_id": ticket.ticket_id,
+                "title": ticket.title,
+                "description": ticket.description,
+                "priority": ticket.priority,
+                "metadata": ticket.metadata,
+                "search_config": search_config,  # Include custom search config if saved
+                "processing_stage": "retrieval",
+                "status": "processing",
+                "current_agent": "Pattern Recognition Agent",
+                "classified_domain": None,  # No domain classification - will search all domains
+                "messages": [],
+            }
+            # Agent names for progress tracking (without classification)
+            agents = [
+                "Pattern Recognition Agent",
+                "Label Assignment Agent",
+                "Resolution Generation Agent"
+            ]
+        else:
+            initial_state: TicketState = {
+                "ticket_id": ticket.ticket_id,
+                "title": ticket.title,
+                "description": ticket.description,
+                "priority": ticket.priority,
+                "metadata": ticket.metadata,
+                "search_config": search_config,  # Include custom search config if saved
+                "processing_stage": "classification",
+                "status": "processing",
+                "current_agent": "Domain Classification Agent",
+                "messages": [],
+            }
+            # Agent names for progress tracking (with classification)
+            agents = [
+                "Domain Classification Agent",
+                "Pattern Recognition Agent",
+                "Label Assignment Agent",
+                "Resolution Generation Agent"
+            ]
 
         agent_index = 0
         # Accumulate full state across all agents (not just last partial update)
@@ -226,26 +278,43 @@ async def stream_agent_updates(ticket: TicketInput) -> AsyncGenerator[str, None]
 
 
 def _agent_key(agent_name: str) -> str:
-    """Convert agent name to frontend key."""
+    """Convert agent name to frontend key.
+
+    Handles both full agent names and short names from node state.
+    """
+    # Mapping for both full names and short names
     mapping = {
+        # Full names
         "Domain Classification Agent": "classification",
         "Pattern Recognition Agent": "patternRecognition",
         "Label Assignment Agent": "labelAssignment",
         "Resolution Generation Agent": "resolutionGeneration",
+        # Short names (from node state current_agent field)
+        "classification": "classification",
+        "retrieval": "patternRecognition",
+        "labeling": "labelAssignment",
+        "resolution": "resolutionGeneration",
     }
     return mapping.get(agent_name, agent_name.lower().replace(" ", "_"))
 
 
 def _extract_agent_data(agent_name: str, state: dict) -> dict:
-    """Extract relevant data from state for each agent."""
-    if agent_name == "Domain Classification Agent":
+    """Extract relevant data from state for each agent.
+
+    Handles both full agent names (e.g., "Domain Classification Agent")
+    and short names from node state (e.g., "classification").
+    """
+    # Normalize agent name to handle both short and full names
+    agent_key = agent_name.lower()
+
+    if agent_key in ("domain classification agent", "classification"):
         return {
             "classified_domain": state.get("classified_domain"),
             "confidence": state.get("classification_confidence"),
             "reasoning": state.get("classification_reasoning"),
             "keywords": state.get("extracted_keywords", []),
         }
-    elif agent_name == "Pattern Recognition Agent":
+    elif agent_key in ("pattern recognition agent", "retrieval"):
         similar_tickets = state.get("similar_tickets", [])
         # Get top 5 similar tickets for display
         top_tickets = similar_tickets[:5] if similar_tickets else []
@@ -270,7 +339,7 @@ def _extract_agent_data(agent_name: str, state: dict) -> dict:
                 for ticket in top_tickets
             ],
         }
-    elif agent_name == "Label Assignment Agent":
+    elif agent_key in ("label assignment agent", "labeling"):
         # Historical labels (from similar tickets)
         historical_labels = state.get("historical_labels", [])
         historical_confidence = state.get("historical_label_confidence", {})
@@ -330,7 +399,7 @@ def _extract_agent_data(agent_name: str, state: dict) -> dict:
             "rejected_labels": rejected_labels,
             "total_candidates": total_candidates,
         }
-    elif agent_name == "Resolution Generation Agent":
+    elif agent_key in ("resolution generation agent", "resolution"):
         resolution = state.get("resolution_plan", {})
         return {
             "summary": resolution.get("summary", ""),
@@ -385,6 +454,67 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "service": "RRE Ticket Processing API"
     }
+
+
+@app.get("/api/config")
+async def get_config():
+    """Get current configuration settings."""
+    return {
+        "skip_domain_classification": SKIP_DOMAIN_CLASSIFICATION,
+        "active_agents": [
+            "Pattern Recognition Agent",
+            "Label Assignment Agent",
+            "Resolution Generation Agent"
+        ] if SKIP_DOMAIN_CLASSIFICATION else [
+            "Domain Classification Agent",
+            "Pattern Recognition Agent",
+            "Label Assignment Agent",
+            "Resolution Generation Agent"
+        ]
+    }
+
+
+@app.get("/api/schema-config")
+async def get_schema_config_endpoint():
+    """
+    Get schema configuration for the frontend.
+
+    Returns domain definitions, colors, and UI settings that allow
+    the frontend to dynamically adapt to different data schemas.
+    """
+    from src.utils.schema_config import get_schema_config
+
+    try:
+        schema_config = get_schema_config()
+        return schema_config.get_frontend_config()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load schema config: {str(e)}"
+        )
+
+
+@app.post("/api/reload-schema-config")
+async def reload_schema_config_endpoint():
+    """
+    Reload schema configuration from file.
+
+    Use this after editing config/schema_config.yaml to apply changes
+    without restarting the server.
+    """
+    from src.utils.schema_config import reload_schema_config
+
+    try:
+        reload_schema_config()
+        return {
+            "status": "success",
+            "message": "Schema configuration reloaded"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to reload schema config: {str(e)}"
+        )
 
 
 @app.get("/api/output")
@@ -457,14 +587,13 @@ async def preview_search(request: RetrievalPreviewRequest):
             domain = request.config.domain_filter
             classification_confidence = None
         else:
-            # Run classification to get domain
-            classifications = await classification_agent.classify_all_domains(
-                request.title,
-                request.description
-            )
-            domain, classification_confidence, _ = classification_agent.determine_final_domain(
-                classifications
-            )
+            # Run classification to get domain using LangChain tool
+            classification_result = await classify_ticket_domain.ainvoke({
+                "title": request.title,
+                "description": request.description
+            })
+            domain = classification_result.get("classified_domain", "Unknown")
+            classification_confidence = classification_result.get("confidence")
 
         # Run preview search with config
         result = await pattern_recognition_agent.preview_search(
@@ -578,14 +707,37 @@ async def root():
         "version": "1.0.0",
         "docs": "/docs",
         "endpoints": {
+            # v1 endpoints (LangGraph-based)
             "process_ticket": "/api/process-ticket",
             "preview_search": "/api/preview-search",
             "save_search_config": "/api/save-search-config",
             "load_search_config": "/api/load-search-config",
             "get_output": "/api/output",
             "download_csv": "/api/download-csv",
-            "health": "/api/health"
-        }
+            "health": "/api/health",
+        },
+        "v2_endpoints": {
+            # Component endpoints (individual component access)
+            "embedding": {
+                "generate": "/v2/embedding/generate",
+                "batch": "/v2/embedding/batch",
+                "health": "/v2/embedding/health",
+            },
+            "retrieval": {
+                "search": "/v2/retrieval/search",
+                "stats": "/v2/retrieval/stats",
+                "health": "/v2/retrieval/health",
+            },
+            "classification": {
+                "classify": "/v2/classification/classify",
+                "health": "/v2/classification/health",
+            },
+            "labeling": {
+                "assign": "/v2/labeling/assign",
+                "health": "/v2/labeling/health",
+            },
+            # Note: Full pipeline orchestration uses /api/process-ticket (LangGraph-based)
+        },
     }
 
 

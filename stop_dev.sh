@@ -1,20 +1,22 @@
 #!/bin/bash
 
-# Stop script for EIP Dashboard
-# Kills both the Python FastAPI backend and Next.js frontend
+# Stop script for Test Recommendation Backend
+# Kills the Python FastAPI backend server on port 8000
 
-echo "🛑 Stopping EIP Intelligent Ticket Management Dashboard"
-echo "================================================"
+echo "========================================"
+echo "  Stopping Backend Server (Port 8000)  "
+echo "========================================"
 echo ""
 
-# Kill processes on ports 8000 and 3000
-echo "Stopping backend (port 8000) and frontend (port 3000)..."
-lsof -ti:8000 -ti:3000 | xargs kill -9 2>/dev/null
+# Find and kill processes on port 8000
+PIDS=$(lsof -ti:8000 2>/dev/null)
 
-if [ $? -eq 0 ]; then
-    echo "✅ All services stopped successfully"
+if [ -n "$PIDS" ]; then
+    echo "Stopping backend processes: $PIDS"
+    echo "$PIDS" | xargs kill -9 2>/dev/null
+    echo "Backend server stopped successfully"
 else
-    echo "ℹ️  No services were running"
+    echo "No backend server running on port 8000"
 fi
 
 echo ""
