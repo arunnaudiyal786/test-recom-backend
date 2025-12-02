@@ -1,0 +1,625 @@
+{
+    "version": "1.0",
+    "last_updated": "2025-01-15",
+    "total_categories": 25,
+    "categories": [
+      {
+        "id": "batch_enrollment_maintenance",
+        "number": 1,
+        "name": "Batch Enrollment / Maintenance",
+        "description": "Handling bulk updates or maintenance of multiple user or account records at once.",
+        "keywords": [
+          "batch enrollment",
+          "bulk update",
+          "mass maintenance",
+          "batch processing",
+          "multiple accounts",
+          "bulk load",
+          "batch job",
+          "mass update"
+        ],
+        "examples": [
+          "Need to update enrollment status for 500 members",
+          "Batch job to refresh member eligibility dates",
+          "Bulk update of member addresses from file"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "batch_online_abend",
+        "number": 2,
+        "name": "Batch or Online Abend",
+        "description": "Incidents where a scheduled batch or online processing job ends abnormally (abend = abnormal end).",
+        "keywords": [
+          "abend",
+          "abnormal end",
+          "job failure",
+          "batch failure",
+          "processing error",
+          "job aborted",
+          "system crash",
+          "job terminated",
+          "fatal error"
+        ],
+        "examples": [
+          "Nightly batch job ENRL001 abended at step 5",
+          "Online transaction processing abend during peak hours",
+          "Claims batch job failed with RC=12"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "contract_addition_update",
+        "number": 3,
+        "name": "Contract Addition / Update",
+        "description": "Creation or update of agreement records related to clients, vendors, or services.",
+        "keywords": [
+          "contract",
+          "agreement",
+          "vendor contract",
+          "client agreement",
+          "contract terms",
+          "contract setup",
+          "service agreement",
+          "contract modification"
+        ],
+        "examples": [
+          "New vendor contract setup required",
+          "Contract terms update for renewal",
+          "Add new provider agreement to system"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "eligibility_feed",
+        "number": 4,
+        "name": "Eligibility Feed",
+        "description": "Data transmission that determines or updates eligibility status for services or benefits.",
+        "keywords": [
+          "eligibility",
+          "enrollment feed",
+          "834 file",
+          "eligibility transmission",
+          "benefit eligibility",
+          "coverage status",
+          "eligibility file",
+          "enrollment data"
+        ],
+        "examples": [
+          "Eligibility feed from vendor failed validation",
+          "834 enrollment file processing issues",
+          "Daily eligibility feed not received"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "error_processing",
+        "number": 5,
+        "name": "Error Processing",
+        "description": "Identifying, tracking, and resolving system or data errors.",
+        "keywords": [
+          "error",
+          "exception",
+          "validation error",
+          "data error",
+          "processing error",
+          "error handling",
+          "error queue",
+          "error resolution",
+          "exception handling"
+        ],
+        "examples": [
+          "Claims processing errors in error queue",
+          "Data validation errors blocking enrollment",
+          "Resolve errors from nightly batch run"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "file_processing",
+        "number": 6,
+        "name": "File Processing",
+        "description": "Automated or manual handling of digital files for workflows or integrations.",
+        "keywords": [
+          "file processing",
+          "file transfer",
+          "FTP",
+          "SFTP",
+          "file parsing",
+          "data file",
+          "file import",
+          "file export",
+          "file validation"
+        ],
+        "examples": [
+          "Daily claims file not processing correctly",
+          "File transfer to vendor failing",
+          "Import provider data file into system"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "id_card_changes",
+        "number": 7,
+        "name": "ID Card Changes",
+        "description": "Updates or reissues related to identification card information.",
+        "keywords": [
+          "ID card",
+          "member card",
+          "card reissue",
+          "card update",
+          "identification card",
+          "card printing",
+          "card request",
+          "new card"
+        ],
+        "examples": [
+          "Member ID card reprint request",
+          "ID card information incorrect",
+          "Request new cards for group renewal"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "job_run_request",
+        "number": 8,
+        "name": "Job Run Request",
+        "description": "Initiation or scheduling of automated background jobs or scripts.",
+        "keywords": [
+          "job run",
+          "schedule job",
+          "execute script",
+          "run batch",
+          "trigger job",
+          "job scheduling",
+          "job execution",
+          "run process"
+        ],
+        "examples": [
+          "Request to run monthly eligibility refresh job",
+          "Schedule new data extraction job for reporting",
+          "Execute ad-hoc claims processing job"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "letters_reporting",
+        "number": 9,
+        "name": "Letters / Reporting",
+        "description": "Generating formal letters, reports, or summarized documents from system data.",
+        "keywords": [
+          "letter",
+          "correspondence",
+          "member letter",
+          "notification",
+          "document generation",
+          "welcome letter",
+          "EOB",
+          "member communication"
+        ],
+        "examples": [
+          "Welcome letter not generating",
+          "EOB letter formatting issue",
+          "Generate termination letters for group"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "limited_liability_cob",
+        "number": 10,
+        "name": "Limited Liability / COB",
+        "description": "Processing scenarios involving limited liability clauses or Coordination of Benefits (COB).",
+        "keywords": [
+          "COB",
+          "coordination of benefits",
+          "limited liability",
+          "primary payer",
+          "secondary payer",
+          "other coverage",
+          "dual coverage",
+          "COB order"
+        ],
+        "examples": [
+          "COB order determination issue",
+          "Limited liability clause not applying",
+          "Update member COB information"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.75
+      },
+      {
+        "id": "membership",
+        "number": 11,
+        "name": "Membership",
+        "description": "Managing records, status, or updates pertaining to memberships or enrollments.",
+        "keywords": [
+          "membership",
+          "member record",
+          "enrollment",
+          "subscriber",
+          "member status",
+          "member ID",
+          "member information",
+          "enrollment status"
+        ],
+        "examples": [
+          "Member record needs status update",
+          "Enrollment effective date incorrect",
+          "Add new dependent to member record"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "migration",
+        "number": 12,
+        "name": "Migration",
+        "description": "Moving data, applications, or services from one environment or system to another.",
+        "keywords": [
+          "migration",
+          "data migration",
+          "system migration",
+          "platform migration",
+          "conversion",
+          "cutover",
+          "data conversion",
+          "system upgrade"
+        ],
+        "examples": [
+          "Legacy system data migration",
+          "Database migration to new platform",
+          "Migrate members from old system"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "online_screen_changes",
+        "number": 13,
+        "name": "Online Screen Changes",
+        "description": "Updates or modifications to web-based or application user interface screens.",
+        "keywords": [
+          "screen",
+          "UI",
+          "user interface",
+          "web page",
+          "portal",
+          "frontend",
+          "display",
+          "screen update",
+          "UI change"
+        ],
+        "examples": [
+          "Member portal screen update",
+          "UI change for enrollment form",
+          "Add new field to provider search screen"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "overage_dependent",
+        "number": 14,
+        "name": "Overage Dependent",
+        "description": "Handling records or rules for dependents exceeding standard eligibility age or criteria.",
+        "keywords": [
+          "overage",
+          "dependent",
+          "age limit",
+          "aging out",
+          "dependent eligibility",
+          "age 26",
+          "student dependent",
+          "overage child"
+        ],
+        "examples": [
+          "Dependent aging out needs extension review",
+          "Overage dependent rule not applying correctly",
+          "Student dependent verification for overage"
+        ],
+        "parent": "membership",
+        "confidence_threshold": 0.75
+      },
+      {
+        "id": "pcp_maintenance",
+        "number": 15,
+        "name": "PCP Maintenance",
+        "description": "Updates or management actions related to Primary Care Physician (PCP) assignments or data.",
+        "keywords": [
+          "PCP",
+          "primary care",
+          "physician",
+          "provider assignment",
+          "PCP change",
+          "doctor assignment",
+          "PCP selection",
+          "primary care provider"
+        ],
+        "examples": [
+          "Member PCP assignment not updating",
+          "PCP panel capacity update needed",
+          "Change member PCP to new provider"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.75
+      },
+      {
+        "id": "product_addition_update",
+        "number": 16,
+        "name": "Product Addition / Update",
+        "description": "Adding new products or making changes to existing product records.",
+        "keywords": [
+          "product",
+          "benefit plan",
+          "plan setup",
+          "product configuration",
+          "new plan",
+          "plan update",
+          "benefit package",
+          "product definition"
+        ],
+        "examples": [
+          "New benefit plan setup for 2025",
+          "Product configuration change for HSA plan",
+          "Add new dental product to system"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "release_management",
+        "number": 17,
+        "name": "Release Management",
+        "description": "Planning, scheduling, and controlling updates or releases of software/services.",
+        "keywords": [
+          "release",
+          "deployment",
+          "rollout",
+          "release schedule",
+          "version",
+          "go-live",
+          "release planning",
+          "production release"
+        ],
+        "examples": [
+          "Q1 release deployment planning",
+          "Production release scheduling",
+          "Coordinate release with vendor"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "reporting",
+        "number": 18,
+        "name": "Reporting",
+        "description": "Compilation and distribution of structured data analysis or dashboards.",
+        "keywords": [
+          "report",
+          "dashboard",
+          "analytics",
+          "data extract",
+          "metrics",
+          "KPI",
+          "business intelligence",
+          "data analysis"
+        ],
+        "examples": [
+          "Monthly enrollment report discrepancy",
+          "Dashboard data not refreshing",
+          "Create new claims summary report"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "scheduling_job_decommission",
+        "number": 19,
+        "name": "Scheduling / Job Decommission",
+        "description": "Planning job executions or retiring (turning off) obsolete automated jobs.",
+        "keywords": [
+          "decommission",
+          "retire job",
+          "remove schedule",
+          "disable job",
+          "end-of-life",
+          "job sunset",
+          "schedule change",
+          "job removal"
+        ],
+        "examples": [
+          "Decommission legacy report generation job",
+          "Remove obsolete nightly sync job from scheduler",
+          "Retire old data purge job"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "small_group_individual_maintenance",
+        "number": 20,
+        "name": "Small Group / Individual Maintenance",
+        "description": "Administrative tasks specific to small groups or individual accounts.",
+        "keywords": [
+          "small group",
+          "individual",
+          "single account",
+          "individual maintenance",
+          "small employer",
+          "individual plan",
+          "small business"
+        ],
+        "examples": [
+          "Small group renewal processing",
+          "Individual account maintenance request",
+          "Update small group billing information"
+        ],
+        "parent": "membership",
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "technical_implementation",
+        "number": 21,
+        "name": "Technical Implementation",
+        "description": "Carrying out technical configurations, integrations, or deployments.",
+        "keywords": [
+          "implementation",
+          "configuration",
+          "integration",
+          "deployment",
+          "setup",
+          "technical change",
+          "system configuration",
+          "technical setup"
+        ],
+        "examples": [
+          "New integration endpoint configuration",
+          "Technical implementation for API change",
+          "Configure new system interface"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      },
+      {
+        "id": "technical_implementation_dli_bm",
+        "number": 22,
+        "name": "Technical Implementation - DLI to BM",
+        "description": "Deploying or configuring processes from Data Load Interface (DLI) to Business Module (BM).",
+        "keywords": [
+          "DLI",
+          "data load interface",
+          "BM",
+          "business module",
+          "DLI to BM",
+          "data load",
+          "DLI configuration",
+          "BM integration"
+        ],
+        "examples": [
+          "DLI to BM interface configuration",
+          "Data load process setup for BM",
+          "Configure DLI extract for business module"
+        ],
+        "parent": "technical_implementation",
+        "confidence_threshold": 0.75
+      },
+      {
+        "id": "technical_implementation_route_code",
+        "number": 23,
+        "name": "Technical Implementation - Route Code",
+        "description": "Implementing or updating logic related to system routing codes.",
+        "keywords": [
+          "route code",
+          "routing",
+          "routing logic",
+          "route configuration",
+          "routing rules",
+          "routing table",
+          "route setup"
+        ],
+        "examples": [
+          "New route code setup for claims",
+          "Routing logic update required",
+          "Add routing code for new provider type"
+        ],
+        "parent": "technical_implementation",
+        "confidence_threshold": 0.75
+      },
+      {
+        "id": "technical_implementation_table_update",
+        "number": 24,
+        "name": "Technical Implementation - Table Update",
+        "description": "Making structured updates to system or application database tables.",
+        "keywords": [
+          "table update",
+          "database update",
+          "table change",
+          "schema change",
+          "data table",
+          "reference table",
+          "table modification",
+          "database change"
+        ],
+        "examples": [
+          "Reference table update for new codes",
+          "Database table modification request",
+          "Add new values to lookup table"
+        ],
+        "parent": "technical_implementation",
+        "confidence_threshold": 0.75
+      },
+      {
+        "id": "testing",
+        "number": 25,
+        "name": "Testing",
+        "description": "Running and verifying software functionalities or processes prior to launch or deployment.",
+        "keywords": [
+          "testing",
+          "QA",
+          "test case",
+          "UAT",
+          "validation",
+          "verification",
+          "test environment",
+          "regression testing",
+          "quality assurance"
+        ],
+        "examples": [
+          "UAT testing for new enrollment flow",
+          "Regression testing required",
+          "Test new claims processing logic"
+        ],
+        "parent": null,
+        "confidence_threshold": 0.7
+      }
+    ],
+    "hierarchy": {
+      "root_categories": [
+        "batch_enrollment_maintenance",
+        "batch_online_abend",
+        "contract_addition_update",
+        "eligibility_feed",
+        "error_processing",
+        "file_processing",
+        "id_card_changes",
+        "job_run_request",
+        "letters_reporting",
+        "limited_liability_cob",
+        "membership",
+        "migration",
+        "online_screen_changes",
+        "pcp_maintenance",
+        "product_addition_update",
+        "release_management",
+        "reporting",
+        "scheduling_job_decommission",
+        "technical_implementation",
+        "testing"
+      ],
+      "parent_child_relationships": {
+        "membership": [
+          "overage_dependent",
+          "small_group_individual_maintenance"
+        ],
+        "technical_implementation": [
+          "technical_implementation_dli_bm",
+          "technical_implementation_route_code",
+          "technical_implementation_table_update"
+        ]
+      }
+    },
+    "settings": {
+      "default_confidence_threshold": 0.7,
+      "max_labels_per_ticket": 3,
+      "novelty_detection_threshold": 0.5
+    }
+  }
