@@ -76,7 +76,8 @@ async def _evaluate_single_label(
     Returns:
         Evaluation result dict
     """
-    prompt = f"""You are a label validation expert for technical support tickets.
+    system_prompt = "You are a label classification expert. Respond only with valid JSON."
+    user_prompt = f"""You are a label validation expert for technical support tickets.
 
 Evaluate whether the label "{label_name}" should be assigned to this ticket.
 
@@ -101,8 +102,8 @@ Output JSON:
 
     try:
         response = await llm.ainvoke([
-            {"role": "system", "content": "You are a label classification expert. Respond only with valid JSON."},
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
         ])
 
         result = json.loads(response.content)
@@ -110,7 +111,8 @@ Output JSON:
             "label": label_name,
             "assign": result.get("assign_label", False),
             "confidence": result.get("confidence", 0.0),
-            "reasoning": result.get("reasoning", "")
+            "reasoning": result.get("reasoning", ""),
+            "actual_prompt": user_prompt
         }
 
     except Exception as e:
@@ -118,7 +120,8 @@ Output JSON:
             "label": label_name,
             "assign": False,
             "confidence": 0.0,
-            "reasoning": f"Error: {str(e)}"
+            "reasoning": f"Error: {str(e)}",
+            "actual_prompt": user_prompt
         }
 
 
@@ -155,7 +158,8 @@ async def evaluate_historical_labels(
         return {
             "assigned_labels": [],
             "label_confidence": {},
-            "all_evaluations": []
+            "all_evaluations": [],
+            "sample_prompt": "[No historical labels to evaluate - no similar tickets found with labels]"
         }
 
     llm = ChatOpenAI(
@@ -181,16 +185,21 @@ async def evaluate_historical_labels(
     # Filter by threshold
     assigned_labels = []
     label_confidence = {}
+    sample_prompt = None
 
     for result in results:
         label_confidence[result["label"]] = result["confidence"]
         if result["assign"] and result["confidence"] >= confidence_threshold:
             assigned_labels.append(result["label"])
+        # Capture the first prompt as a sample
+        if sample_prompt is None and result.get("actual_prompt"):
+            sample_prompt = result["actual_prompt"]
 
     return {
         "assigned_labels": assigned_labels,
         "label_confidence": label_confidence,
-        "all_evaluations": results
+        "all_evaluations": results,
+        "sample_prompt": sample_prompt
     }
 
 
@@ -203,7 +212,7 @@ async def generate_business_labels(
     existing_labels: List[str],
     max_labels: int = 5,
     confidence_threshold: float = 0.7
-) -> List[Dict[str, Any]]:
+) -> Dict[str, Any]:
     """
     Generate business-oriented labels using AI analysis.
 
@@ -220,7 +229,7 @@ async def generate_business_labels(
         confidence_threshold: Minimum confidence to include (default 0.7)
 
     Returns:
-        List of label dicts with label, confidence, category, reasoning
+        Dict with labels list and actual_prompt
     """
     llm = ChatOpenAI(
         model=Config.CLASSIFICATION_MODEL,
@@ -228,7 +237,7 @@ async def generate_business_labels(
         model_kwargs={"response_format": {"type": "json_object"}}
     )
 
-    prompt = f"""You are a business analyst expert in IT service management.
+    user_prompt = f"""You are a business analyst expert in IT service management.
 
 Generate business-oriented labels for this ticket from a business impact perspective.
 
@@ -260,7 +269,7 @@ Output JSON with up to {max_labels} labels:
     try:
         response = await llm.ainvoke([
             {"role": "system", "content": "You are a business analyst expert. Respond only with valid JSON."},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": user_prompt}
         ])
 
         result = json.loads(response.content)
@@ -275,10 +284,10 @@ Output JSON with up to {max_labels} labels:
                     "reasoning": item.get("reasoning", "")
                 })
 
-        return labels
+        return {"labels": labels, "actual_prompt": user_prompt}
 
     except Exception as e:
-        return []
+        return {"labels": [], "actual_prompt": user_prompt}
 
 
 @tool
@@ -290,7 +299,7 @@ async def generate_technical_labels(
     existing_labels: List[str],
     max_labels: int = 5,
     confidence_threshold: float = 0.7
-) -> List[Dict[str, Any]]:
+) -> Dict[str, Any]:
     """
     Generate technical labels using AI analysis.
 
@@ -307,7 +316,7 @@ async def generate_technical_labels(
         confidence_threshold: Minimum confidence to include (default 0.7)
 
     Returns:
-        List of label dicts with label, confidence, category, reasoning
+        Dict with labels list and actual_prompt
     """
     llm = ChatOpenAI(
         model=Config.CLASSIFICATION_MODEL,
@@ -315,7 +324,7 @@ async def generate_technical_labels(
         model_kwargs={"response_format": {"type": "json_object"}}
     )
 
-    prompt = f"""You are a senior software engineer expert in system diagnostics.
+    user_prompt = f"""You are a senior software engineer expert in system diagnostics.
 
 Generate technical labels for this ticket from a technical/root-cause perspective.
 
@@ -347,7 +356,7 @@ Output JSON with up to {max_labels} labels:
     try:
         response = await llm.ainvoke([
             {"role": "system", "content": "You are a software engineer expert. Respond only with valid JSON."},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": user_prompt}
         ])
 
         result = json.loads(response.content)
@@ -362,7 +371,7 @@ Output JSON with up to {max_labels} labels:
                     "reasoning": item.get("reasoning", "")
                 })
 
-        return labels
+        return {"labels": labels, "actual_prompt": user_prompt}
 
     except Exception as e:
-        return []
+        return {"labels": [], "actual_prompt": user_prompt}

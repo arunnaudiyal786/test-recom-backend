@@ -56,6 +56,10 @@ class TicketState(TypedDict, total=False):
     resolution_plan: Optional[Dict]  # Complete resolution plan
     resolution_confidence: Optional[float]
 
+    # ========== Captured Prompts for UI Transparency ==========
+    label_assignment_prompts: Optional[Dict[str, str]]  # {historical, business, technical}
+    resolution_generation_prompt: Optional[str]  # Full resolution prompt
+
     # ========== Workflow Control ==========
     processing_stage: str  # Current stage in workflow
     status: Literal["processing", "success", "error", "failed"]
@@ -112,6 +116,10 @@ class AgentOutput(TypedDict, total=False):
 
     resolution_plan: Optional[Dict]
     resolution_confidence: Optional[float]
+
+    # Captured prompts for UI transparency
+    label_assignment_prompts: Optional[Dict[str, str]]  # {historical, business, technical}
+    resolution_generation_prompt: Optional[str]  # Full resolution prompt
 
     # Messages to add to audit trail
     messages: Optional[List[Dict]]

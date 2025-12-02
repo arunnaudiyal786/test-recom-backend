@@ -164,7 +164,18 @@ class ResolutionGenerationAgent:
 
             print(f"\n📝 Resolution Generation Agent - Creating resolution plan")
 
-            # Generate resolution plan
+            # Generate the prompt first so we can capture it for transparency
+            resolution_prompt = get_resolution_generation_prompt(
+                title=title,
+                description=description,
+                domain=domain,
+                priority=priority,
+                labels=labels,
+                similar_tickets=similar_tickets,
+                avg_similarity=avg_similarity
+            )
+
+            # Generate resolution plan (uses the same prompt internally)
             resolution_plan = await self.generate_resolution_plan(
                 title=title,
                 description=description,
@@ -187,10 +198,11 @@ class ResolutionGenerationAgent:
             print(f"   🔍 Diagnostic steps: {len(resolution_plan.get('diagnostic_steps', []))}")
             print(f"   ⚙️  Resolution steps: {len(resolution_plan.get('resolution_steps', []))}")
 
-            # Return state update
+            # Return state update with captured prompt for UI transparency
             return {
                 "resolution_plan": resolution_plan,
                 "resolution_confidence": resolution_confidence,
+                "resolution_generation_prompt": resolution_prompt,  # Actual prompt sent to LLM
                 "status": "success",
                 "current_agent": "Resolution Generation Agent",
                 "messages": [{

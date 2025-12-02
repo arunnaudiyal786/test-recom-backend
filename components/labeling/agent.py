@@ -88,13 +88,31 @@ async def labeling_node(state: Dict[str, Any]) -> Dict[str, Any]:
         })
 
         # Wait for all tasks
-        historical_result, business_labels, technical_labels = await asyncio.gather(
+        historical_result, business_result, technical_result = await asyncio.gather(
             historical_task, business_task, technical_task
         )
 
         # Extract historical labels
         historical_labels = historical_result.get("assigned_labels", [])
         historical_confidence = historical_result.get("label_confidence", {})
+
+        # Extract business and technical labels from new dict format
+        business_labels = business_result.get("labels", [])
+        technical_labels = technical_result.get("labels", [])
+
+        # Collect actual prompts for transparency
+        actual_prompts = {
+            "historical": historical_result.get("sample_prompt", ""),
+            "business": business_result.get("actual_prompt", ""),
+            "technical": technical_result.get("actual_prompt", "")
+        }
+
+        # DEBUG: Log what we're getting from the tool results
+        print(f"   🔍 DEBUG: business_result keys: {business_result.keys() if isinstance(business_result, dict) else type(business_result)}")
+        print(f"   🔍 DEBUG: technical_result keys: {technical_result.keys() if isinstance(technical_result, dict) else type(technical_result)}")
+        print(f"   🔍 DEBUG: actual_prompts historical length: {len(actual_prompts.get('historical', ''))}")
+        print(f"   🔍 DEBUG: actual_prompts business length: {len(actual_prompts.get('business', ''))}")
+        print(f"   🔍 DEBUG: actual_prompts technical length: {len(actual_prompts.get('technical', ''))}")
 
         # Format label distribution for output
         distribution_formatted = {
@@ -127,6 +145,9 @@ async def labeling_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "assigned_labels": list(all_labels),
             "label_confidence": historical_confidence,
             "label_distribution": distribution_formatted,
+
+            # Actual prompts sent to LLM
+            "label_assignment_prompts": actual_prompts,
 
             "status": "success",
             "current_agent": "labeling",

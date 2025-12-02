@@ -60,6 +60,10 @@ class TicketWorkflowState(TypedDict, total=False):
     resolution_plan: Optional[Dict]
     resolution_confidence: Optional[float]
 
+    # ========== Captured Prompts for UI Transparency ==========
+    label_assignment_prompts: Optional[Dict[str, str]]  # {historical, business, technical}
+    resolution_generation_prompt: Optional[str]  # Full resolution prompt sent to LLM
+
     # ========== Workflow Control ==========
     status: Literal["processing", "success", "error", "failed"]
     error_message: Optional[str]

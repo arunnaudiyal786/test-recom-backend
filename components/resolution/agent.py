@@ -70,6 +70,7 @@ async def resolution_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
         resolution_plan = result.get("resolution_plan", {})
         confidence = result.get("confidence", 0.0)
+        actual_prompt = result.get("actual_prompt", "")
 
         print(f"   ✅ Generated resolution plan with confidence {confidence:.2%}")
         print(f"   📋 {len(resolution_plan.get('diagnostic_steps', []))} diagnostic steps")
@@ -78,6 +79,7 @@ async def resolution_node(state: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "resolution_plan": resolution_plan,
             "resolution_confidence": confidence,
+            "resolution_generation_prompt": actual_prompt,
             "status": "success",
             "current_agent": "resolution",
             "messages": [{

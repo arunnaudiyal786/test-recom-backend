@@ -89,7 +89,7 @@ async def generate_resolution_plan(
         model_kwargs={"response_format": {"type": "json_object"}}
     )
 
-    prompt = f"""You are an expert technical support engineer with deep knowledge of healthcare IT systems.
+    user_prompt = f"""You are an expert technical support engineer with deep knowledge of healthcare IT systems.
 
 Generate a comprehensive resolution plan for the following ticket using Chain-of-Thought reasoning.
 
@@ -148,7 +148,7 @@ Generate a detailed, actionable resolution plan. Respond ONLY with valid JSON.""
     try:
         response = await llm.ainvoke([
             {"role": "system", "content": "You are an expert technical support engineer. Respond only with valid JSON."},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": user_prompt}
         ])
 
         data = json.loads(response.content)
@@ -158,7 +158,8 @@ Generate a detailed, actionable resolution plan. Respond ONLY with valid JSON.""
 
         return {
             "resolution_plan": resolution_plan,
-            "confidence": resolution_plan.get("confidence", 0.5)
+            "confidence": resolution_plan.get("confidence", 0.5),
+            "actual_prompt": user_prompt
         }
 
     except Exception as e:
@@ -190,7 +191,8 @@ Generate a detailed, actionable resolution plan. Respond ONLY with valid JSON.""
 
         return {
             "resolution_plan": fallback,
-            "confidence": 0.0
+            "confidence": 0.0,
+            "actual_prompt": user_prompt
         }
 
 

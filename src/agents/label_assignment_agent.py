@@ -137,7 +137,7 @@ class LabelAssignmentAgent:
             similar_tickets: List of similar tickets
 
         Returns:
-            Dict with historical_labels, confidence, and distribution
+            Dict with historical_labels, confidence, distribution, and example_prompt
         """
         # Extract candidate labels from similar tickets
         candidate_labels = self.extract_candidate_labels(similar_tickets)
@@ -146,11 +146,23 @@ class LabelAssignmentAgent:
             return {
                 "historical_labels": [],
                 "historical_label_confidence": {},
-                "historical_label_distribution": {}
+                "historical_label_distribution": {},
+                "example_prompt": None
             }
 
         # Calculate label frequency distribution
         label_frequency = calculate_label_distribution(similar_tickets)
+
+        # Capture one example prompt for transparency (using first candidate label)
+        first_label = list(candidate_labels)[0]
+        example_prompt = get_label_assignment_prompt(
+            label_name=first_label,
+            title=title,
+            description=description,
+            domain=domain,
+            similar_tickets=similar_tickets,
+            label_frequency=label_frequency
+        )
 
         # Evaluate all labels in parallel
         tasks = [
@@ -185,7 +197,8 @@ class LabelAssignmentAgent:
         return {
             "historical_labels": assigned_labels,
             "historical_label_confidence": label_confidence,
-            "historical_label_distribution": label_distribution
+            "historical_label_distribution": label_distribution,
+            "example_prompt": example_prompt  # Captured prompt for UI transparency
         }
 
     # =========================================================================
@@ -200,7 +213,7 @@ class LabelAssignmentAgent:
         priority: str,
         similar_tickets: List[Dict[str, Any]],
         existing_labels: Set[str]
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         Generate business-oriented labels using AI.
 
@@ -213,10 +226,10 @@ class LabelAssignmentAgent:
             existing_labels: Set of existing labels from historical tickets
 
         Returns:
-            List of generated business labels with confidence and reasoning
+            Dict with labels list and captured prompt for transparency
         """
         try:
-            # Generate prompt
+            # Generate prompt and capture it for transparency
             prompt = get_business_label_generation_prompt(
                 title=title,
                 description=description,
@@ -258,11 +271,14 @@ class LabelAssignmentAgent:
             if filtered_labels and business_summary:
                 filtered_labels[0]['business_summary'] = business_summary
 
-            return filtered_labels
+            return {
+                "labels": filtered_labels,
+                "prompt": prompt  # Captured prompt for UI transparency
+            }
 
         except Exception as e:
             print(f"⚠️ Error generating business labels: {str(e)}")
-            return []
+            return {"labels": [], "prompt": None}
 
     # =========================================================================
     # TECHNICAL LABEL GENERATION (New AI-generated)
@@ -276,7 +292,7 @@ class LabelAssignmentAgent:
         priority: str,
         similar_tickets: List[Dict[str, Any]],
         existing_labels: Set[str]
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         Generate technical labels using AI.
 
@@ -289,10 +305,10 @@ class LabelAssignmentAgent:
             existing_labels: Set of existing labels from historical tickets
 
         Returns:
-            List of generated technical labels with confidence and reasoning
+            Dict with labels list and captured prompt for transparency
         """
         try:
-            # Generate prompt
+            # Generate prompt and capture it for transparency
             prompt = get_technical_label_generation_prompt(
                 title=title,
                 description=description,
@@ -334,11 +350,14 @@ class LabelAssignmentAgent:
             if filtered_labels and root_cause_hypothesis:
                 filtered_labels[0]['root_cause_hypothesis'] = root_cause_hypothesis
 
-            return filtered_labels
+            return {
+                "labels": filtered_labels,
+                "prompt": prompt  # Captured prompt for UI transparency
+            }
 
         except Exception as e:
             print(f"⚠️ Error generating technical labels: {str(e)}")
-            return []
+            return {"labels": [], "prompt": None}
 
     # =========================================================================
     # MAIN EXECUTION
@@ -393,9 +412,20 @@ class LabelAssignmentAgent:
                     title, description, domain, priority, similar_tickets, existing_labels
                 )
 
-                historical_result, business_labels, technical_labels = await asyncio.gather(
+                historical_result, business_result, technical_result = await asyncio.gather(
                     historical_task, business_task, technical_task
                 )
+
+                # Extract labels from results (new format returns dict with labels and prompt)
+                business_labels = business_result.get('labels', [])
+                technical_labels = technical_result.get('labels', [])
+
+                # Capture prompts for UI transparency
+                captured_prompts = {
+                    "historical": historical_result.get('example_prompt'),
+                    "business": business_result.get('prompt'),
+                    "technical": technical_result.get('prompt')
+                }
             else:
                 print(f"   🔄 Running historical label assignment only...")
                 historical_result = await self.assign_historical_labels(
@@ -403,6 +433,13 @@ class LabelAssignmentAgent:
                 )
                 business_labels = []
                 technical_labels = []
+
+                # Only historical prompt available
+                captured_prompts = {
+                    "historical": historical_result.get('example_prompt'),
+                    "business": None,
+                    "technical": None
+                }
 
             # Extract results
             historical_labels = historical_result['historical_labels']
@@ -454,7 +491,7 @@ class LabelAssignmentAgent:
             total_labels = len(historical_labels) + len(business_labels) + len(technical_labels)
             print(f"\n   ✅ Total labels assigned: {total_labels}")
 
-            # Return state update
+            # Return state update with captured prompts for UI transparency
             return {
                 # Historical labels
                 "historical_labels": historical_labels,
@@ -469,6 +506,9 @@ class LabelAssignmentAgent:
                 "assigned_labels": all_assigned_labels,
                 "label_confidence": all_label_confidence,
                 "label_distribution": historical_label_distribution,
+
+                # Captured prompts for UI transparency (shows actual LLM prompts)
+                "label_assignment_prompts": captured_prompts,
 
                 # Status
                 "status": "success",

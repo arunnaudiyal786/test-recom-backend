@@ -307,6 +307,14 @@ def _extract_agent_data(agent_name: str, state: dict) -> dict:
     # Normalize agent name to handle both short and full names
     agent_key = agent_name.lower()
 
+    # DEBUG: Log state keys for label assignment agent
+    if agent_key in ("label assignment agent", "labeling"):
+        print(f"   🔍 DEBUG _extract: state keys: {list(state.keys())}")
+        print(f"   🔍 DEBUG _extract: label_assignment_prompts present: {'label_assignment_prompts' in state}")
+        if 'label_assignment_prompts' in state:
+            prompts = state.get('label_assignment_prompts', {})
+            print(f"   🔍 DEBUG _extract: prompts keys: {list(prompts.keys()) if isinstance(prompts, dict) else type(prompts)}")
+
     if agent_key in ("domain classification agent", "classification"):
         return {
             "classified_domain": state.get("classified_domain"),
@@ -354,6 +362,9 @@ def _extract_agent_data(agent_name: str, state: dict) -> dict:
         all_confidence = state.get("label_confidence", {})
         label_distribution = state.get("label_distribution", {})
 
+        # Actual prompts sent to LLM
+        actual_prompts = state.get("label_assignment_prompts", {})
+
         # Build historical labels with details (for rejected calculation)
         assigned_with_details = [
             {
@@ -398,6 +409,9 @@ def _extract_agent_data(agent_name: str, state: dict) -> dict:
             "assigned_with_details": assigned_with_details,
             "rejected_labels": rejected_labels,
             "total_candidates": total_candidates,
+
+            # Actual prompts for transparency
+            "actual_prompts": actual_prompts,
         }
     elif agent_key in ("resolution generation agent", "resolution"):
         resolution = state.get("resolution_plan", {})
@@ -406,6 +420,8 @@ def _extract_agent_data(agent_name: str, state: dict) -> dict:
             "total_steps": len(resolution.get("resolution_steps", [])),
             "estimated_hours": resolution.get("total_estimated_time_hours", 0),
             "confidence": resolution.get("confidence", 0),
+            # Actual prompt for transparency
+            "actual_prompt": state.get("resolution_generation_prompt", ""),
         }
     return {}
 
@@ -562,6 +578,48 @@ async def download_csv():
         if isinstance(e, HTTPException):
             raise
         raise HTTPException(status_code=500, detail=f"Error downloading CSV: {str(e)}")
+
+
+@app.get("/api/prompts")
+async def get_prompts():
+    """
+    Return prompt templates used by agents for UI transparency.
+
+    This endpoint exposes the actual prompts used by the Label Assignment
+    and Resolution Generation agents, allowing users to understand
+    how the AI is making decisions.
+    """
+    from src.prompts.label_assignment_prompts import (
+        LABEL_ASSIGNMENT_TEMPLATE,
+        BUSINESS_LABEL_GENERATION_TEMPLATE,
+        TECHNICAL_LABEL_GENERATION_TEMPLATE,
+        LABEL_CRITERIA
+    )
+    from src.prompts.resolution_generation_prompts import (
+        RESOLUTION_GENERATION_PROMPT
+    )
+
+    return {
+        "label_assignment": {
+            "historical": {
+                "template": LABEL_ASSIGNMENT_TEMPLATE,
+                "description": "Binary classifier prompt for evaluating historical labels from similar tickets",
+                "label_criteria": LABEL_CRITERIA
+            },
+            "business": {
+                "template": BUSINESS_LABEL_GENERATION_TEMPLATE,
+                "description": "AI-generated business-oriented labels based on impact and stakeholders"
+            },
+            "technical": {
+                "template": TECHNICAL_LABEL_GENERATION_TEMPLATE,
+                "description": "AI-generated technical labels for system components and failure modes"
+            }
+        },
+        "resolution_generation": {
+            "template": RESOLUTION_GENERATION_PROMPT,
+            "description": "Chain-of-Thought prompt for generating comprehensive resolution plans"
+        }
+    }
 
 
 # ============================================================================
