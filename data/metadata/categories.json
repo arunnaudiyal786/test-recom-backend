@@ -582,41 +582,6 @@
         "confidence_threshold": 0.7
       }
     ],
-    "hierarchy": {
-      "root_categories": [
-        "batch_enrollment_maintenance",
-        "batch_online_abend",
-        "contract_addition_update",
-        "eligibility_feed",
-        "error_processing",
-        "file_processing",
-        "id_card_changes",
-        "job_run_request",
-        "letters_reporting",
-        "limited_liability_cob",
-        "membership",
-        "migration",
-        "online_screen_changes",
-        "pcp_maintenance",
-        "product_addition_update",
-        "release_management",
-        "reporting",
-        "scheduling_job_decommission",
-        "technical_implementation",
-        "testing"
-      ],
-      "parent_child_relationships": {
-        "membership": [
-          "overage_dependent",
-          "small_group_individual_maintenance"
-        ],
-        "technical_implementation": [
-          "technical_implementation_dli_bm",
-          "technical_implementation_route_code",
-          "technical_implementation_table_update"
-        ]
-      }
-    },
     "settings": {
       "default_confidence_threshold": 0.7,
       "max_labels_per_ticket": 3,

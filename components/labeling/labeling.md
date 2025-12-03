@@ -1,325 +1,162 @@
 # Labeling Component
 
-The Labeling component assigns labels to tickets using a **three-tier approach**: historical labels from similar tickets (validated by AI), AI-generated business labels, and AI-generated technical labels.
+The Labeling component assigns labels to tickets using a **three-tier approach**: category labels from a predefined taxonomy, AI-generated business labels, and AI-generated technical labels.
 
 ## Overview
 
-Unlike simple tag extraction, this component uses intelligent label assignment that:
-1. Validates historical labels against the current ticket context
-2. Generates new business-oriented labels from an impact perspective
-3. Generates new technical labels from a root-cause perspective
+This component uses intelligent label assignment that:
+1. Classifies tickets into predefined categories from `categories.json` (25 categories)
+2. Generates business-oriented labels from an impact perspective
+3. Generates technical labels from a root-cause perspective
 
 All three methods run **in parallel** for optimal performance.
 
-## Architecture
+## File Structure
 
 ```
 labeling/
-├── __init__.py          # Public API exports
-├── agent.py             # LangGraph node wrapper (LabelAssignmentAgent)
-├── models.py            # Pydantic request/response models
-├── service.py           # LabelingService (full-featured)
-├── tools.py             # LangChain @tool decorated functions
-├── router.py            # FastAPI HTTP endpoints
-└── README.md            # This file
+├── __init__.py     # Public API exports
+├── agent.py        # LangGraph node (labeling_node, LabelAssignmentAgent)
+├── models.py       # Pydantic models (CategoryLabel, LabelWithConfidence, etc.)
+├── service.py      # CategoryTaxonomy singleton + LabelingService
+├── tools.py        # LangChain @tool functions
+├── router.py       # FastAPI HTTP endpoints (/v2/labeling/*)
+└── labeling.md     # This documentation
 ```
 
-## Three-Tier Labeling Approach
+## Three-Tier Labeling Flow
 
 ```
-Input Ticket + Similar Tickets
-              │
-    ┌─────────┼─────────┐
-    │         │         │
-    ▼         ▼         ▼
-┌────────┐ ┌────────┐ ┌────────┐
-│Historic│ │Business│ │Technic-│
-│Labels  │ │Labels  │ │al      │
-│(AI-val)│ │(AI-gen)│ │Labels  │
-└────────┘ └────────┘ └────────┘
-    │         │         │
-    │    (prefix: [BIZ]) │(prefix: [TECH])
-    │         │         │
-    └─────────┼─────────┘
-              ▼
-    Combined Unique Labels
+Input Ticket
+      │
+      ├───────────────────────┬───────────────────────┐
+      │                       │                       │
+      ▼                       ▼                       ▼
+┌──────────────┐       ┌──────────────┐       ┌──────────────┐
+│  Category    │       │  Business    │       │  Technical   │
+│  Labels      │       │  Labels      │       │  Labels      │
+│ (taxonomy)   │       │ (AI-gen)     │       │ (AI-gen)     │
+└──────────────┘       └──────────────┘       └──────────────┘
+      │                       │                       │
+   [CAT]                   [BIZ]                  [TECH]
+      │                       │                       │
+      └───────────────────────┴───────────────────────┘
+                              │
+                              ▼
+                    Combined Unique Labels
 ```
 
-### Label Categories
-
-| Category | Source | Prefix | Example |
-|----------|--------|--------|---------|
-| **Historical** | Similar tickets | None | `Code Fix`, `#MM_ALDER` |
+| Type | Source | Prefix | Example |
+|------|--------|--------|---------|
+| **Category** | Predefined taxonomy | `[CAT]` | `[CAT] Batch Enrollment Maintenance` |
 | **Business** | AI analysis | `[BIZ]` | `[BIZ] Customer-facing` |
-| **Technical** | AI analysis | `[TECH]` | `[TECH] Database-issue` |
+| **Technical** | AI analysis | `[TECH]` | `[TECH] Database-connection` |
 
-## Components
+---
 
-### Models (`models.py`)
+## Models (`models.py`)
 
-#### LabelWithConfidence
+### CategoryLabel
 
-A label with its confidence score and metadata.
+Category assignment from the predefined taxonomy.
+
+```python
+class CategoryLabel(BaseModel):
+    id: str           # Category ID (e.g., "batch_enrollment_maintenance")
+    name: str         # Human-readable name
+    confidence: float # Confidence score (0-1)
+    reasoning: Optional[str] = None
+```
+
+### LabelWithConfidence
+
+AI-generated label with confidence.
 
 ```python
 class LabelWithConfidence(BaseModel):
-    label: str               # Label name
-    confidence: float        # Confidence score (0-1)
-    category: str            # 'historical', 'business', or 'technical'
-    reasoning: Optional[str] # Explanation for assignment
+    label: str        # Label name
+    confidence: float # Confidence score (0-1)
+    category: str     # "category", "business", or "technical"
+    reasoning: Optional[str] = None
 ```
 
-#### LabelingRequest
+### SimilarTicketInput
+
+Simplified similar ticket for labeling input.
+
+```python
+class SimilarTicketInput(BaseModel):
+    ticket_id: str
+    title: str
+    description: str
+    labels: List[str] = []
+    priority: str = "Medium"
+    resolution: Optional[str] = None
+```
+
+### LabelingRequest
 
 Input for label assignment.
 
 ```python
 class LabelingRequest(BaseModel):
-    title: str                    # Ticket title
-    description: str              # Ticket description
-    domain: str                   # Classified domain (MM, CIW, Specialty)
-    priority: str = "Medium"      # Ticket priority
-    similar_tickets: List[Dict]   # Similar tickets from retrieval
+    title: str
+    description: str
+    domain: str           # MM, CIW, Specialty
+    priority: str = "Medium"
+    similar_tickets: List[Dict]
 ```
 
-#### LabelingResponse
+### LabelingResponse
 
 Output from label assignment.
 
 ```python
 class LabelingResponse(BaseModel):
-    historical_labels: List[LabelWithConfidence]  # From similar tickets
-    business_labels: List[LabelWithConfidence]    # AI-generated business
-    technical_labels: List[LabelWithConfidence]   # AI-generated technical
-    all_labels: List[str]         # Combined unique labels
-    label_distribution: Dict[str, str]  # Distribution in similar tickets
+    category_labels: List[CategoryLabel]        # From taxonomy
+    business_labels: List[LabelWithConfidence]  # AI-generated
+    technical_labels: List[LabelWithConfidence] # AI-generated
+    all_labels: List[str]                       # Combined with prefixes
+    novelty_detected: bool = False              # Novel category flag
+    novelty_reasoning: Optional[str] = None
 ```
 
 ---
 
-### Tools (`tools.py`)
+## Service (`service.py`)
 
-LangChain `@tool` decorated functions for LangGraph integration.
+Contains two classes: **CategoryTaxonomy** (singleton) and **LabelingService**.
 
-#### `extract_candidate_labels`
+### CategoryTaxonomy
 
-Extracts unique labels and their frequency from similar tickets.
-
-```python
-@tool
-def extract_candidate_labels(
-    similar_tickets: List[Dict[str, Any]]
-) -> Dict[str, Any]:
-    """
-    Extract unique labels and their frequency from similar tickets.
-
-    Args:
-        similar_tickets: List of similar ticket dicts with 'labels' field
-
-    Returns:
-        Dict containing:
-        - candidate_labels: List of unique labels
-        - label_distribution: Dict mapping label to {count, percentage, formatted}
-        - total_tickets: Number of tickets analyzed
-    """
-```
-
-**Example Output**:
-```python
-{
-    "candidate_labels": ["Code Fix", "#MM_ALDER", "Configuration Fix"],
-    "label_distribution": {
-        "Code Fix": {"count": 14, "percentage": 0.7, "formatted": "14/20"},
-        "#MM_ALDER": {"count": 8, "percentage": 0.4, "formatted": "8/20"}
-    },
-    "total_tickets": 20
-}
-```
-
-#### `evaluate_historical_labels`
-
-Validates historical labels using parallel binary classifiers.
+Singleton cache for category taxonomy from `categories.json`.
 
 ```python
-@tool
-async def evaluate_historical_labels(
-    title: str,
-    description: str,
-    domain: str,
-    candidate_labels: List[str],
-    label_distribution: Dict[str, Dict],
-    confidence_threshold: float = 0.7
-) -> Dict[str, Any]:
-    """
-    Evaluate historical labels using parallel binary classifiers.
+class CategoryTaxonomy:
+    """Loads categories once at first access."""
 
-    Args:
-        title: Ticket title
-        description: Ticket description
-        domain: Classified domain
-        candidate_labels: List of candidate labels to evaluate
-        label_distribution: Dict mapping label to frequency info
-        confidence_threshold: Minimum confidence to assign (default 0.7)
+    @classmethod
+    def get_instance(cls) -> "CategoryTaxonomy"
 
-    Returns:
-        Dict containing:
-        - assigned_labels: Labels that passed threshold
-        - label_confidence: Dict mapping label to confidence
-        - all_evaluations: Full results for all labels
-        - sample_prompt: Sample prompt used for transparency
-    """
+    @classmethod
+    def reset_instance(cls) -> None  # For testing
+
+    def get_all_categories(self) -> List[Dict[str, Any]]
+    def get_category_by_id(self, category_id: str) -> Optional[Dict]
+    def get_category_ids(self) -> List[str]
+    def get_confidence_threshold(self, category_id: str) -> float
+    def get_max_labels_per_ticket(self) -> int
+    def get_novelty_threshold(self) -> float
+    def format_categories_for_prompt(self) -> str
+    def format_categories_compact(self) -> str
+    def validate_category_assignment(self, category_id: str, confidence: float) -> bool
+    def get_category_count(self) -> int
+    def get_settings(self) -> Dict[str, Any]
 ```
 
-**Binary Classifier Prompt**:
-```
-You are a label validation expert for technical support tickets.
+### LabelingConfig
 
-Evaluate whether the label "{label_name}" should be assigned.
-
-Historical frequency: This label appears in {frequency} similar tickets.
-
-Ticket:
-Title: {title}
-Description: {description}
-Domain: {domain}
-
-Consider:
-1. Does the ticket content match the label semantics?
-2. Is the historical frequency a strong indicator?
-3. What is your confidence level?
-
-Output JSON:
-{
-  "assign_label": true or false,
-  "confidence": 0.0 to 1.0,
-  "reasoning": "brief explanation"
-}
-```
-
-#### `generate_business_labels`
-
-Generates business-oriented labels from an impact perspective.
-
-```python
-@tool
-async def generate_business_labels(
-    title: str,
-    description: str,
-    domain: str,
-    priority: str,
-    existing_labels: List[str],
-    max_labels: int = 5,
-    confidence_threshold: float = 0.7
-) -> Dict[str, Any]:
-    """
-    Generate business-oriented labels using AI analysis.
-
-    Business label categories:
-    - Impact: Customer-facing, Internal, Revenue-impacting
-    - Urgency: Time-sensitive, Compliance-related, SLA-bound
-    - Process: Workflow-blocking, Data-quality, Integration-issue
-
-    Returns:
-        Dict with:
-        - labels: List of label dicts with confidence
-        - actual_prompt: The prompt sent to LLM
-    """
-```
-
-#### `generate_technical_labels`
-
-Generates technical labels from a root-cause perspective.
-
-```python
-@tool
-async def generate_technical_labels(
-    title: str,
-    description: str,
-    domain: str,
-    priority: str,
-    existing_labels: List[str],
-    max_labels: int = 5,
-    confidence_threshold: float = 0.7
-) -> Dict[str, Any]:
-    """
-    Generate technical labels using AI analysis.
-
-    Technical label categories:
-    - Component: Database, API, UI, Integration, Batch
-    - Issue Type: Performance, Error, Configuration, Data
-    - Root Cause: Connection, Timeout, Memory, Logic, External
-
-    Returns:
-        Dict with:
-        - labels: List of label dicts with confidence
-        - actual_prompt: The prompt sent to LLM
-    """
-```
-
----
-
-### Agent (`agent.py`)
-
-LangGraph node wrapper that orchestrates all three labeling methods.
-
-#### `labeling_node`
-
-```python
-async def labeling_node(state: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    LangGraph node for label assignment.
-
-    Runs three methods in parallel:
-    1. Historical label evaluation
-    2. Business label generation
-    3. Technical label generation
-
-    Args:
-        state: Current workflow state with ticket info and similar tickets
-
-    Returns:
-        Partial state update with:
-        - historical_labels: Validated historical labels
-        - historical_label_confidence: Confidence per label
-        - historical_label_distribution: Frequency distribution
-        - business_labels: AI-generated business labels
-        - technical_labels: AI-generated technical labels
-        - assigned_labels: Combined unique labels (backward compat)
-        - label_assignment_prompts: Actual prompts used
-        - status: "success" or "error"
-        - current_agent: "labeling"
-    """
-```
-
-**State Requirements**:
-- `title`: Ticket title
-- `description`: Ticket description
-- `classified_domain`: Domain from classification (optional, defaults to "Unknown")
-- `priority`: Ticket priority (optional, defaults to "Medium")
-- `similar_tickets`: List of similar tickets from retrieval
-
-#### LabelAssignmentAgent
-
-Callable wrapper class.
-
-```python
-class LabelAssignmentAgent:
-    """Callable wrapper for labeling_node."""
-
-    async def __call__(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        return await labeling_node(state)
-
-# Singleton instance
-label_assignment_agent = LabelAssignmentAgent()
-```
-
----
-
-### Service (`service.py`)
-
-Full-featured service class for HTTP API usage.
-
-#### LabelingConfig
+Configuration for LabelingService.
 
 ```python
 class LabelingConfig(ComponentConfig):
@@ -335,51 +172,161 @@ class LabelingConfig(ComponentConfig):
         env_prefix = "LABELING_"
 ```
 
-| Setting | Environment Variable | Default |
-|---------|---------------------|---------|
-| Model | `LABELING_MODEL` | `gpt-4o` |
-| Temperature | `LABELING_TEMPERATURE` | `0.2` |
-| Confidence Threshold | `LABELING_CONFIDENCE_THRESHOLD` | `0.7` |
-| Enable AI Labels | `LABELING_ENABLE_AI_LABELS` | `True` |
+### LabelingService
 
-#### LabelingService
+Main service for HTTP API usage.
 
 ```python
 class LabelingService(BaseComponent[LabelingRequest, LabelingResponse]):
-    """Service for assigning labels to tickets."""
+    def __init__(self, config: Optional[LabelingConfig] = None)
 
-    async def process(self, request: LabelingRequest) -> LabelingResponse:
-        """Assign labels to a ticket."""
+    async def process(self, request: LabelingRequest) -> LabelingResponse
+    async def health_check(self) -> Dict[str, Any]
 
-    async def health_check(self) -> Dict[str, Any]:
-        """Check if labeling service is healthy."""
+    # Internal methods
+    async def _assign_category_labels(title, description, priority)
+    async def _generate_business_labels(title, description, domain, priority, existing_labels)
+    async def _generate_technical_labels(title, description, domain, priority, existing_labels)
 ```
-
-**Key Methods**:
-
-| Method | Description |
-|--------|-------------|
-| `_extract_candidate_labels()` | Get unique labels from similar tickets |
-| `_calculate_label_distribution()` | Calculate label frequency |
-| `_evaluate_historical_label()` | Binary classifier for one label |
-| `_assign_historical_labels()` | Validate all historical labels |
-| `_generate_business_labels()` | Generate business labels |
-| `_generate_technical_labels()` | Generate technical labels |
 
 ---
 
-### Router (`router.py`)
+## Tools (`tools.py`)
+
+LangChain `@tool` decorated functions for LangGraph integration.
+
+### classify_ticket_categories
+
+```python
+@tool
+async def classify_ticket_categories(
+    title: str,
+    description: str,
+    priority: str
+) -> Dict[str, Any]:
+    """
+    Classify a ticket into categories from the predefined taxonomy.
+
+    Uses thresholds from Config:
+    - Config.CATEGORY_MAX_LABELS_PER_TICKET (default: 3)
+    - Config.CATEGORY_DEFAULT_CONFIDENCE_THRESHOLD (default: 0.7)
+    - Config.CATEGORY_NOVELTY_DETECTION_THRESHOLD (default: 0.5)
+
+    Returns:
+        - assigned_categories: List of {id, name, confidence, reasoning}
+        - novelty_detected: Boolean
+        - novelty_reasoning: Explanation if novelty detected
+        - actual_prompt: The prompt sent to LLM
+    """
+```
+
+### generate_business_labels
+
+```python
+@tool
+async def generate_business_labels(
+    title: str,
+    description: str,
+    domain: str,
+    priority: str,
+    existing_labels: List[str],
+    max_labels: int = 5,
+    confidence_threshold: float = 0.7
+) -> Dict[str, Any]:
+    """
+    Generate business-oriented labels.
+
+    Categories: Impact, Urgency, Process
+
+    Returns:
+        - labels: List of {label, confidence, category, reasoning}
+        - actual_prompt: The prompt sent to LLM
+    """
+```
+
+### generate_technical_labels
+
+```python
+@tool
+async def generate_technical_labels(
+    title: str,
+    description: str,
+    domain: str,
+    priority: str,
+    existing_labels: List[str],
+    max_labels: int = 5,
+    confidence_threshold: float = 0.7
+) -> Dict[str, Any]:
+    """
+    Generate technical labels.
+
+    Categories: Component, Issue Type, Root Cause
+
+    Returns:
+        - labels: List of {label, confidence, category, reasoning}
+        - actual_prompt: The prompt sent to LLM
+    """
+```
+
+---
+
+## Agent (`agent.py`)
+
+LangGraph node for the workflow.
+
+### labeling_node
+
+```python
+async def labeling_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    LangGraph node for label assignment.
+
+    Runs all three labeling methods in parallel using asyncio.gather().
+
+    State Requirements:
+        - title: Ticket title
+        - description: Ticket description
+        - classified_domain: Domain (optional, defaults to "Unknown")
+        - priority: Priority (optional, defaults to "Medium")
+
+    Returns partial state update:
+        - category_labels: Assigned categories
+        - novelty_detected: Boolean
+        - novelty_reasoning: Explanation
+        - business_labels: AI-generated business labels
+        - technical_labels: AI-generated technical labels
+        - assigned_labels: Combined with prefixes (backward compat)
+        - label_assignment_prompts: {category, business, technical}
+        - status: "success" or "error"
+        - current_agent: "labeling"
+        - messages: Status message
+    """
+```
+
+### LabelAssignmentAgent
+
+Callable wrapper for backward compatibility.
+
+```python
+class LabelAssignmentAgent:
+    async def __call__(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        return await labeling_node(state)
+
+label_assignment_agent = LabelAssignmentAgent()  # Singleton
+```
+
+---
+
+## Router (`router.py`)
 
 FastAPI HTTP endpoints.
-
-#### Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/v2/labeling/assign` | Assign labels to a ticket |
 | `GET` | `/v2/labeling/health` | Health check |
 
-#### Example Request
+### Example Request
 
 ```bash
 curl -X POST http://localhost:8000/v2/labeling/assign \
@@ -389,32 +336,20 @@ curl -X POST http://localhost:8000/v2/labeling/assign \
     "description": "MM_ALDER experiencing connection pool exhaustion",
     "domain": "MM",
     "priority": "High",
-    "similar_tickets": [
-      {
-        "ticket_id": "JIRA-MM-001",
-        "title": "Similar DB issue",
-        "labels": ["Code Fix", "#MM_ALDER"]
-      }
-    ]
+    "similar_tickets": []
   }'
 ```
 
-#### Example Response
+### Example Response
 
 ```json
 {
-  "historical_labels": [
+  "category_labels": [
     {
-      "label": "Code Fix",
-      "confidence": 0.85,
-      "category": "historical",
-      "reasoning": "Ticket describes code-related issue requiring fix"
-    },
-    {
-      "label": "#MM_ALDER",
-      "confidence": 0.92,
-      "category": "historical",
-      "reasoning": "Explicitly mentions MM_ALDER service"
+      "id": "database_performance",
+      "name": "Database Performance",
+      "confidence": 0.88,
+      "reasoning": "Connection pool exhaustion is a database performance issue"
     }
   ],
   "business_labels": [
@@ -434,176 +369,105 @@ curl -X POST http://localhost:8000/v2/labeling/assign \
     }
   ],
   "all_labels": [
-    "Code Fix",
-    "#MM_ALDER",
+    "[CAT] Database Performance",
     "[BIZ] Customer-facing",
     "[TECH] Database-connection"
   ],
-  "label_distribution": {
-    "Code Fix": "14/20",
-    "#MM_ALDER": "8/20"
-  }
+  "novelty_detected": false,
+  "novelty_reasoning": null
 }
 ```
 
-## Historical Label Validation Logic
+---
 
-Each historical label goes through binary classification:
-
-```python
-async def _evaluate_single_label(label_name, title, description, domain, frequency, llm):
-    """
-    Binary classifier for a single label.
-
-    Uses historical frequency as context:
-    "This label appears in 14/20 similar tickets"
-
-    Returns:
-        {
-            "label": label_name,
-            "assign": bool,
-            "confidence": float,
-            "reasoning": str
-        }
-    """
-```
-
-Labels are only assigned if:
-- `assign == True` (positive decision)
-- `confidence >= 0.7` (meets threshold)
-
-## Parallel Execution
-
-All three methods run concurrently:
+## Public Exports (`__init__.py`)
 
 ```python
-historical_task = evaluate_historical_labels.ainvoke(...)
-business_task = generate_business_labels.ainvoke(...)
-technical_task = generate_technical_labels.ainvoke(...)
+from components.labeling import (
+    # LangGraph node (primary)
+    labeling_node,
+    label_assignment_agent,
 
-historical_result, business_result, technical_result = await asyncio.gather(
-    historical_task, business_task, technical_task
+    # LangChain tools
+    classify_ticket_categories,
+    generate_business_labels,
+    generate_technical_labels,
+
+    # Category taxonomy
+    CategoryTaxonomy,
+
+    # Models
+    LabelingRequest,
+    LabelingResponse,
+    LabelWithConfidence,
+    CategoryLabel,
+    SimilarTicketInput,
+
+    # Service
+    LabelingService,
+    LabelingConfig,
+
+    # Router
+    router,
 )
 ```
 
-This reduces total latency from ~9s (sequential) to ~3s (parallel).
+---
 
-## Usage Examples
+## Category Taxonomy
 
-### Direct Tool Usage
+Categories are defined in `data/metadata/categories.json`.
 
-```python
-from components.labeling.tools import (
-    extract_candidate_labels,
-    evaluate_historical_labels,
-    generate_business_labels
-)
+### Structure
 
-# Step 1: Extract candidates
-candidates = extract_candidate_labels.invoke({
-    "similar_tickets": similar_tickets
-})
-
-# Step 2: Evaluate historical labels
-historical = await evaluate_historical_labels.ainvoke({
-    "title": "DB timeout",
-    "description": "Connection pool exhausted",
-    "domain": "MM",
-    "candidate_labels": candidates["candidate_labels"],
-    "label_distribution": candidates["label_distribution"],
-    "confidence_threshold": 0.7
-})
-
-print(historical["assigned_labels"])
-```
-
-### Service Usage
-
-```python
-from components.labeling.service import LabelingService
-from components.labeling.models import LabelingRequest
-
-service = LabelingService()
-response = await service.process(
-    LabelingRequest(
-        title="API timeout error",
-        description="External API calls timing out",
-        domain="CIW",
-        priority="High",
-        similar_tickets=[...]
-    )
-)
-
-print(f"Historical: {[l.label for l in response.historical_labels]}")
-print(f"Business: {[l.label for l in response.business_labels]}")
-print(f"Technical: {[l.label for l in response.technical_labels]}")
-```
-
-### LangGraph Workflow
-
-```python
-from components.labeling.agent import labeling_node
-
-state = {
-    "title": "Login failure",
-    "description": "Users unable to authenticate",
-    "classified_domain": "MM",
-    "priority": "Critical",
-    "similar_tickets": [...]
-}
-
-result = await labeling_node(state)
-print(f"Assigned: {result['assigned_labels']}")
-```
-
-## Label Categories
-
-### Business Labels
-
-Generated from a business analyst perspective:
-
-| Category | Examples |
-|----------|----------|
-| **Impact** | Customer-facing, Internal, Revenue-impacting |
-| **Urgency** | Time-sensitive, Compliance-related, SLA-bound |
-| **Process** | Workflow-blocking, Data-quality, Integration-issue |
-
-### Technical Labels
-
-Generated from an engineer perspective:
-
-| Category | Examples |
-|----------|----------|
-| **Component** | Database, API, UI, Integration, Batch |
-| **Issue Type** | Performance, Error, Configuration, Data |
-| **Root Cause** | Connection, Timeout, Memory, Logic, External |
-
-## Performance
-
-- **Parallel Execution**: All 3 methods run simultaneously
-- **Historical Evaluation**: 1 API call per candidate label (parallel)
-- **Business Generation**: 1 API call
-- **Technical Generation**: 1 API call
-- **Total Time**: ~2-3 seconds (limited by slowest call)
-- **Cost**: ~$0.02 per labeling (depends on label count)
-
-## Error Handling
-
-```python
-try:
-    result = await labeling_node(state)
-except Exception as e:
-    return {
-        "historical_labels": [],
-        "business_labels": [],
-        "technical_labels": [],
-        "assigned_labels": [],
-        "status": "error",
-        "error_message": f"Labeling failed: {str(e)}"
+```json
+{
+  "categories": [
+    {
+      "id": "batch_enrollment_maintenance",
+      "name": "Batch Enrollment Maintenance",
+      "description": "Issues related to enrollment batch processing",
+      "keywords": ["enrollment", "batch", "maintenance"],
+      "examples": ["Enrollment file failed to process"],
+      "confidence_threshold": 0.75
     }
+  ],
+  "settings": {}
+}
 ```
+
+### Per-Category Thresholds
+
+Each category can have a custom `confidence_threshold`. If not specified, uses `Config.CATEGORY_DEFAULT_CONFIDENCE_THRESHOLD` (0.7).
+
+---
+
+## Novelty Detection
+
+If a ticket doesn't match any category with sufficient confidence:
+
+```python
+if not category_labels and not novelty_detected:
+    novelty_detected = True
+    novelty_reasoning = "No categories matched with sufficient confidence"
+```
+
+This flags tickets for potential taxonomy expansion.
+
+---
 
 ## Configuration
+
+### Centralized Config (`src/utils/config.py`)
+
+```python
+CATEGORIES_JSON_PATH = PROJECT_ROOT / "data" / "metadata" / "categories.json"
+CATEGORY_DEFAULT_CONFIDENCE_THRESHOLD = 0.7
+CATEGORY_MAX_LABELS_PER_TICKET = 3
+CATEGORY_NOVELTY_DETECTION_THRESHOLD = 0.5
+CATEGORY_CLASSIFICATION_MODEL = "gpt-4o"
+CATEGORY_CLASSIFICATION_TEMPERATURE = 0.2
+```
 
 ### Environment Variables
 
@@ -616,25 +480,109 @@ LABELING_MAX_BUSINESS_LABELS=5
 LABELING_MAX_TECHNICAL_LABELS=5
 ```
 
-### Disabling AI-Generated Labels
+---
 
-Set `enable_ai_labels: False` in config to only use historical labels:
+## Usage Examples
+
+### LangGraph Workflow
 
 ```python
-config = LabelingConfig(enable_ai_labels=False)
-service = LabelingService(config)
-# Only returns historical_labels, no business/technical
+from components.labeling import labeling_node
+
+state = {
+    "title": "Login failure",
+    "description": "Users unable to authenticate",
+    "classified_domain": "MM",
+    "priority": "Critical",
+}
+
+result = await labeling_node(state)
+print(f"Labels: {result['assigned_labels']}")
+print(f"Novelty: {result['novelty_detected']}")
 ```
+
+### Direct Tool Usage
+
+```python
+from components.labeling import classify_ticket_categories
+
+result = await classify_ticket_categories.ainvoke({
+    "title": "DB timeout",
+    "description": "Connection pool exhausted",
+    "priority": "High"
+})
+
+print(result["assigned_categories"])
+```
+
+### CategoryTaxonomy
+
+```python
+from components.labeling import CategoryTaxonomy
+
+taxonomy = CategoryTaxonomy.get_instance()
+print(f"Categories: {taxonomy.get_category_count()}")
+print(f"IDs: {taxonomy.get_category_ids()[:3]}")
+```
+
+### HTTP Service
+
+```python
+from components.labeling import LabelingService, LabelingRequest
+
+service = LabelingService()
+response = await service.process(
+    LabelingRequest(
+        title="API timeout",
+        description="External API calls timing out",
+        domain="CIW",
+        priority="High",
+        similar_tickets=[]
+    )
+)
+```
+
+---
+
+## Performance
+
+| Metric | Value |
+|--------|-------|
+| Parallel execution | 3 concurrent API calls |
+| Total time | ~2-3 seconds |
+| API calls | 3 (category + business + technical) |
+| Cost per ticket | ~$0.02 |
+
+---
+
+## Error Handling
+
+```python
+try:
+    result = await labeling_node(state)
+except Exception as e:
+    return {
+        "category_labels": [],
+        "business_labels": [],
+        "technical_labels": [],
+        "assigned_labels": [],
+        "novelty_detected": True,
+        "novelty_reasoning": f"Labeling failed: {str(e)}",
+        "status": "error",
+        "current_agent": "labeling",
+        "error_message": f"Labeling failed: {str(e)}"
+    }
+```
+
+---
 
 ## Prompt Transparency
 
-The component returns the actual prompts used for debugging:
+The component returns actual prompts for debugging:
 
 ```python
 result = await labeling_node(state)
-print(result["label_assignment_prompts"]["historical"])
+print(result["label_assignment_prompts"]["category"])
 print(result["label_assignment_prompts"]["business"])
 print(result["label_assignment_prompts"]["technical"])
 ```
-
-This enables prompt engineering and debugging of label decisions.

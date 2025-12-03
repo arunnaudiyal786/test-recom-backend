@@ -2,7 +2,7 @@
 Labeling Agent - LangGraph node for label assignment.
 
 This agent assigns labels to tickets using three methods:
-1. Historical labels from similar tickets (validated by AI)
+1. Category labels from predefined taxonomy (categories.json)
 2. AI-generated business labels
 3. AI-generated technical labels
 """
@@ -11,8 +11,7 @@ import asyncio
 from typing import Dict, Any, List
 
 from components.labeling.tools import (
-    extract_candidate_labels,
-    evaluate_historical_labels,
+    classify_ticket_categories,
     generate_business_labels,
     generate_technical_labels
 )
@@ -23,7 +22,7 @@ async def labeling_node(state: Dict[str, Any]) -> Dict[str, Any]:
     LangGraph node for label assignment.
 
     Assigns labels using three-tier approach:
-    1. Historical labels from similar tickets
+    1. Category labels from predefined taxonomy (categories.json)
     2. Business labels (AI-generated)
     3. Technical labels (AI-generated)
 
@@ -39,112 +38,94 @@ async def labeling_node(state: Dict[str, Any]) -> Dict[str, Any]:
         # Handle None domain (when classification is skipped)
         domain = state.get("classified_domain") or "Unknown"
         priority = state.get("priority") or "Medium"
-        similar_tickets = state.get("similar_tickets", [])
         ticket_id = state.get("ticket_id", "N/A")
 
         print(f"\n🏷️  Labeling Agent - Assigning labels: {ticket_id}")
 
-        # Step 1: Extract candidate labels from similar tickets
-        candidates = extract_candidate_labels.invoke({
-            "similar_tickets": similar_tickets
-        })
-
-        candidate_labels = candidates.get("candidate_labels", [])
-        label_distribution = candidates.get("label_distribution", {})
-
-        print(f"   📋 Found {len(candidate_labels)} candidate labels from history")
-
-        # Step 2: Run all three label methods in parallel
-        historical_task = evaluate_historical_labels.ainvoke({
+        # Run all three label methods in parallel
+        # 1. Category classification (replaces historical labels)
+        category_task = classify_ticket_categories.ainvoke({
             "title": title,
             "description": description,
-            "domain": domain,
-            "candidate_labels": candidate_labels,
-            "label_distribution": label_distribution,
-            "confidence_threshold": 0.7
+            "priority": priority
         })
 
-        # Get existing labels to avoid duplicates
-        existing_labels = list(candidate_labels)
-
+        # 2. Business labels (unchanged)
         business_task = generate_business_labels.ainvoke({
             "title": title,
             "description": description,
             "domain": domain,
             "priority": priority,
-            "existing_labels": existing_labels,
+            "existing_labels": [],  # No historical labels to avoid
             "max_labels": 5,
             "confidence_threshold": 0.7
         })
 
+        # 3. Technical labels (unchanged)
         technical_task = generate_technical_labels.ainvoke({
             "title": title,
             "description": description,
             "domain": domain,
             "priority": priority,
-            "existing_labels": existing_labels,
+            "existing_labels": [],  # No historical labels to avoid
             "max_labels": 5,
             "confidence_threshold": 0.7
         })
 
         # Wait for all tasks
-        historical_result, business_result, technical_result = await asyncio.gather(
-            historical_task, business_task, technical_task
+        category_result, business_result, technical_result = await asyncio.gather(
+            category_task, business_task, technical_task
         )
 
-        # Extract historical labels
-        historical_labels = historical_result.get("assigned_labels", [])
-        historical_confidence = historical_result.get("label_confidence", {})
+        # Extract category labels (replaces historical labels)
+        category_labels = category_result.get("assigned_categories", [])
+        novelty_detected = category_result.get("novelty_detected", False)
+        novelty_reasoning = category_result.get("novelty_reasoning")
 
-        # Extract business and technical labels from new dict format
+        # Extract embedding data for novelty detection agent
+        ticket_embedding = category_result.get("ticket_embedding", [])
+        all_similarity_scores = category_result.get("all_similarity_scores", [])
+
+        # Extract business and technical labels
         business_labels = business_result.get("labels", [])
         technical_labels = technical_result.get("labels", [])
 
         # Collect actual prompts for transparency
         actual_prompts = {
-            "historical": historical_result.get("sample_prompt", ""),
+            "category": category_result.get("actual_prompt", ""),
             "business": business_result.get("actual_prompt", ""),
             "technical": technical_result.get("actual_prompt", "")
         }
 
-        # DEBUG: Log what we're getting from the tool results
-        print(f"   🔍 DEBUG: business_result keys: {business_result.keys() if isinstance(business_result, dict) else type(business_result)}")
-        print(f"   🔍 DEBUG: technical_result keys: {technical_result.keys() if isinstance(technical_result, dict) else type(technical_result)}")
-        print(f"   🔍 DEBUG: actual_prompts historical length: {len(actual_prompts.get('historical', ''))}")
-        print(f"   🔍 DEBUG: actual_prompts business length: {len(actual_prompts.get('business', ''))}")
-        print(f"   🔍 DEBUG: actual_prompts technical length: {len(actual_prompts.get('technical', ''))}")
-
-        # Format label distribution for output
-        distribution_formatted = {
-            label: info.get("formatted", "0/0")
-            for label, info in label_distribution.items()
-        }
-
-        # Combine all labels
-        all_labels = set(historical_labels)
+        # Combine all labels for backward compatibility
+        all_labels = set()
+        for cat in category_labels:
+            all_labels.add(f"[CAT] {cat.get('name', '')}")
         for label_info in business_labels:
             all_labels.add(f"[BIZ] {label_info.get('label', '')}")
         for label_info in technical_labels:
             all_labels.add(f"[TECH] {label_info.get('label', '')}")
 
-        print(f"   ✅ Assigned {len(historical_labels)} historical labels")
+        print(f"   ✅ Assigned {len(category_labels)} category labels")
         print(f"   ✅ Generated {len(business_labels)} business labels")
         print(f"   ✅ Generated {len(technical_labels)} technical labels")
+        if novelty_detected:
+            print(f"   ⚠️  Novelty detected: {novelty_reasoning}")
 
         return {
-            # Historical labels
-            "historical_labels": historical_labels,
-            "historical_label_confidence": historical_confidence,
-            "historical_label_distribution": distribution_formatted,
+            # Category labels (replaces historical_labels)
+            "category_labels": category_labels,
 
-            # AI-generated labels
+            # AI-generated labels (unchanged)
             "business_labels": business_labels,
             "technical_labels": technical_labels,
 
             # Combined (backward compatibility)
             "assigned_labels": list(all_labels),
-            "label_confidence": historical_confidence,
-            "label_distribution": distribution_formatted,
+
+            # Embedding data for novelty detection agent
+            "ticket_embedding": ticket_embedding,
+            "all_category_scores": all_similarity_scores,
 
             # Actual prompts sent to LLM
             "label_assignment_prompts": actual_prompts,
@@ -153,21 +134,19 @@ async def labeling_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "current_agent": "labeling",
             "messages": [{
                 "role": "assistant",
-                "content": f"Assigned {len(all_labels)} total labels: {len(historical_labels)} historical, {len(business_labels)} business, {len(technical_labels)} technical"
+                "content": f"Assigned {len(all_labels)} total labels: {len(category_labels)} category, {len(business_labels)} business, {len(technical_labels)} technical"
             }]
         }
 
     except Exception as e:
         print(f"   ❌ Labeling error: {str(e)}")
         return {
-            "historical_labels": [],
-            "historical_label_confidence": {},
-            "historical_label_distribution": {},
+            "category_labels": [],
             "business_labels": [],
             "technical_labels": [],
             "assigned_labels": [],
-            "label_confidence": {},
-            "label_distribution": {},
+            "ticket_embedding": [],
+            "all_category_scores": [],
             "status": "error",
             "current_agent": "labeling",
             "error_message": f"Labeling failed: {str(e)}",

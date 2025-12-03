@@ -20,6 +20,7 @@ from src.orchestrator.state import TicketWorkflowState
 from components.classification.agent import classification_node
 from components.retrieval.agent import retrieval_node
 from components.labeling.agent import labeling_node
+from components.novelty.agent import novelty_node
 from components.resolution.agent import resolution_node
 
 # ============================================================================
@@ -62,6 +63,21 @@ def route_after_retrieval(state: TicketWorkflowState) -> str:
 def route_after_labeling(state: TicketWorkflowState) -> str:
     """
     Route after labeling based on success/error.
+
+    Args:
+        state: Current workflow state
+
+    Returns:
+        Next node name: "novelty" or "error_handler"
+    """
+    if state.get("status") == "error":
+        return "error_handler"
+    return "novelty"
+
+
+def route_after_novelty(state: TicketWorkflowState) -> str:
+    """
+    Route after novelty detection based on success/error.
 
     Args:
         state: Current workflow state
@@ -178,6 +194,7 @@ def build_workflow() -> StateGraph:
         workflow.add_node("Domain Classification Agent", classification_node)
     workflow.add_node("Pattern Recognition Agent", retrieval_node)
     workflow.add_node("Label Assignment Agent", labeling_node)
+    workflow.add_node("Novelty Detection Agent", novelty_node)
     workflow.add_node("Resolution Generation Agent", resolution_node)
     workflow.add_node("Error Handler", error_handler_node)
 
@@ -212,6 +229,15 @@ def build_workflow() -> StateGraph:
     workflow.add_conditional_edges(
         "Label Assignment Agent",
         route_after_labeling,
+        {
+            "novelty": "Novelty Detection Agent",
+            "error_handler": "Error Handler"
+        }
+    )
+
+    workflow.add_conditional_edges(
+        "Novelty Detection Agent",
+        route_after_novelty,
         {
             "resolution": "Resolution Generation Agent",
             "error_handler": "Error Handler"

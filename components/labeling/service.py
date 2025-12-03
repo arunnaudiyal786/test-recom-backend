@@ -2,13 +2,17 @@
 Labeling Service Component.
 
 Assigns labels to tickets using three methods:
-1. Historical Labels - from similar historical tickets
+1. Category Labels - from predefined taxonomy (categories.json)
 2. Business Labels - AI-generated from business perspective
 3. Technical Labels - AI-generated from technical perspective
+
+Also includes CategoryTaxonomy - a singleton cache for category data.
 """
 
 import asyncio
+import json
 from typing import Dict, Any, List, Optional, Set
+from pathlib import Path
 
 from openai import AsyncOpenAI
 from openai import RateLimitError, APIError, APITimeoutError
@@ -19,8 +23,155 @@ from components.labeling.models import (
     LabelingRequest,
     LabelingResponse,
     LabelWithConfidence,
+    CategoryLabel,
 )
+from src.utils.config import Config
+from src.prompts.label_assignment_prompts import get_category_classification_prompt
 
+
+# =============================================================================
+# CATEGORY TAXONOMY (Singleton Cache)
+# =============================================================================
+
+class CategoryTaxonomy:
+    """
+    Singleton cache for category taxonomy from categories.json.
+
+    Loads categories once at first access and provides lookup functions.
+    Uses thresholds from centralized Config.
+
+    Usage:
+        taxonomy = CategoryTaxonomy.get_instance()
+        categories = taxonomy.get_all_categories()
+        threshold = taxonomy.get_confidence_threshold("batch_enrollment")
+    """
+
+    _instance: Optional["CategoryTaxonomy"] = None
+    _categories: List[Dict[str, Any]] = []
+    _categories_by_id: Dict[str, Dict[str, Any]] = {}
+    _settings: Dict[str, Any] = {}
+
+    def __new__(cls) -> "CategoryTaxonomy":
+        """Ensure singleton pattern."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._load_categories()
+        return cls._instance
+
+    @classmethod
+    def get_instance(cls) -> "CategoryTaxonomy":
+        """Get singleton instance."""
+        return cls()
+
+    @classmethod
+    def reset_instance(cls) -> None:
+        """Reset singleton (useful for testing)."""
+        cls._instance = None
+        cls._categories = []
+        cls._categories_by_id = {}
+        cls._settings = {}
+
+    def _load_categories(self) -> None:
+        """Load categories from JSON file."""
+        categories_path = Config.CATEGORIES_JSON_PATH
+
+        if not categories_path.exists():
+            raise FileNotFoundError(
+                f"Categories file not found: {categories_path}. "
+                "Please ensure data/metadata/categories.json exists."
+            )
+
+        with open(categories_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self._categories = data.get("categories", [])
+        self._settings = data.get("settings", {})
+
+        # Build lookup index by ID
+        self._categories_by_id = {
+            cat["id"]: cat for cat in self._categories
+        }
+
+        print(f"   [CategoryTaxonomy] Loaded {len(self._categories)} categories")
+
+    def get_all_categories(self) -> List[Dict[str, Any]]:
+        """Return all categories with metadata."""
+        return self._categories
+
+    def get_category_by_id(self, category_id: str) -> Optional[Dict[str, Any]]:
+        """Lookup category by ID."""
+        return self._categories_by_id.get(category_id)
+
+    def get_category_ids(self) -> List[str]:
+        """Get list of all category IDs."""
+        return list(self._categories_by_id.keys())
+
+    def get_confidence_threshold(self, category_id: str) -> float:
+        """
+        Get confidence threshold for a category.
+
+        Uses per-category threshold from JSON if available,
+        otherwise falls back to Config.CATEGORY_DEFAULT_CONFIDENCE_THRESHOLD.
+        """
+        category = self.get_category_by_id(category_id)
+        if category and "confidence_threshold" in category:
+            return category["confidence_threshold"]
+        return Config.CATEGORY_DEFAULT_CONFIDENCE_THRESHOLD
+
+    def get_max_labels_per_ticket(self) -> int:
+        """Get maximum labels per ticket from Config."""
+        return Config.CATEGORY_MAX_LABELS_PER_TICKET
+
+    def get_novelty_threshold(self) -> float:
+        """Get novelty detection threshold from Config."""
+        return Config.CATEGORY_NOVELTY_DETECTION_THRESHOLD
+
+    def format_categories_for_prompt(self) -> str:
+        """Format all categories for LLM prompt context."""
+        lines = []
+        for cat in self._categories:
+            keywords_str = ", ".join(cat.get("keywords", [])[:5])
+            examples_str = " | ".join(cat.get("examples", [])[:2])
+
+            lines.append(
+                f"**{cat['id']}** - {cat['name']}\n"
+                f"  Description: {cat['description']}\n"
+                f"  Keywords: {keywords_str}\n"
+                f"  Examples: {examples_str}"
+            )
+
+        return "\n\n".join(lines)
+
+    def format_categories_compact(self) -> str:
+        """Format categories in a compact format for shorter prompts."""
+        lines = []
+        for cat in self._categories:
+            keywords_str = ", ".join(cat.get("keywords", [])[:3])
+            lines.append(f"- **{cat['id']}**: {cat['name']} ({keywords_str})")
+
+        return "\n".join(lines)
+
+    def validate_category_assignment(
+        self,
+        category_id: str,
+        confidence: float
+    ) -> bool:
+        """Validate if a category assignment meets its threshold."""
+        threshold = self.get_confidence_threshold(category_id)
+        return confidence >= threshold
+
+    def get_category_count(self) -> int:
+        """Get total number of categories."""
+        return len(self._categories)
+
+    def get_settings(self) -> Dict[str, Any]:
+        """Get settings from categories.json."""
+        return self._settings
+
+
+# =============================================================================
+# LABELING SERVICE
+# =============================================================================
 
 class LabelingConfig(ComponentConfig):
     """Configuration for Labeling Service."""
@@ -47,7 +198,7 @@ class LabelingService(BaseComponent[LabelingRequest, LabelingResponse]):
     Service for assigning labels to tickets.
 
     Uses three-tier labeling:
-    1. Historical labels from similar tickets (validated by AI)
+    1. Category labels from predefined taxonomy
     2. Business labels (AI-generated)
     3. Technical labels (AI-generated)
 
@@ -64,12 +215,7 @@ class LabelingService(BaseComponent[LabelingRequest, LabelingResponse]):
     """
 
     def __init__(self, config: Optional[LabelingConfig] = None):
-        """
-        Initialize the labeling service.
-
-        Args:
-            config: Optional configuration. Uses defaults if not provided.
-        """
+        """Initialize the labeling service."""
         self.config = config or LabelingConfig()
         self._client: Optional[AsyncOpenAI] = None
 
@@ -90,73 +236,39 @@ class LabelingService(BaseComponent[LabelingRequest, LabelingResponse]):
     def component_name(self) -> str:
         return "labeling"
 
-    def _extract_candidate_labels(
-        self, similar_tickets: List[Dict[str, Any]]
-    ) -> Set[str]:
-        """Extract unique labels from similar tickets."""
-        labels = set()
-        for ticket in similar_tickets:
-            ticket_labels = ticket.get("labels", [])
-            if isinstance(ticket_labels, list):
-                labels.update(ticket_labels)
-        return labels
-
-    def _calculate_label_distribution(
-        self, similar_tickets: List[Dict[str, Any]]
-    ) -> Dict[str, Dict[str, Any]]:
-        """Calculate label frequency distribution."""
-        label_counts = {}
-        total = len(similar_tickets)
-
-        for ticket in similar_tickets:
-            for label in ticket.get("labels", []):
-                if label not in label_counts:
-                    label_counts[label] = 0
-                label_counts[label] += 1
-
-        return {
-            label: {
-                "count": count,
-                "percentage": count / total if total > 0 else 0,
-                "formatted": f"{count}/{total}",
-            }
-            for label, count in label_counts.items()
-        }
-
-    async def _evaluate_historical_label(
+    async def _assign_category_labels(
         self,
-        label_name: str,
         title: str,
         description: str,
-        domain: str,
-        label_distribution: Dict[str, Dict[str, Any]],
-    ) -> Dict[str, Any]:
-        """Evaluate a single historical label using binary classifier."""
-        frequency_info = label_distribution.get(label_name, {})
-        frequency = frequency_info.get("formatted", "0/0")
+        priority: str,
+    ) -> tuple[List[CategoryLabel], bool, Optional[str]]:
+        """
+        Classify ticket into predefined categories.
 
-        prompt = f"""You are a label validation expert for technical support tickets.
+        Returns:
+            Tuple of (category_labels, novelty_detected, novelty_reasoning)
+        """
+        # Get taxonomy singleton
+        taxonomy = CategoryTaxonomy.get_instance()
 
-Evaluate whether the label "{label_name}" should be assigned to this ticket.
+        # Get thresholds from centralized config
+        max_categories = Config.CATEGORY_MAX_LABELS_PER_TICKET
+        confidence_threshold = Config.CATEGORY_DEFAULT_CONFIDENCE_THRESHOLD
 
-Historical frequency: This label appears in {frequency} similar historical tickets.
+        # Format categories for prompt
+        category_definitions = taxonomy.format_categories_for_prompt()
+        total_categories = taxonomy.get_category_count()
 
-Ticket:
-Title: {title}
-Description: {description}
-Domain: {domain}
-
-Consider:
-1. Does the ticket content match the label semantics?
-2. Is the historical frequency a strong indicator?
-3. What is your confidence level?
-
-Output JSON:
-{{
-  "assign_label": true or false,
-  "confidence": 0.0 to 1.0,
-  "reasoning": "brief explanation"
-}}"""
+        # Build prompt
+        prompt = get_category_classification_prompt(
+            title=title,
+            description=description,
+            priority=priority,
+            category_definitions=category_definitions,
+            total_categories=total_categories,
+            max_categories=max_categories,
+            confidence_threshold=confidence_threshold
+        )
 
         try:
             response = await self.client.chat.completions.create(
@@ -164,79 +276,55 @@ Output JSON:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a label classification expert for technical support systems.",
+                        "content": "You are a ticket classification specialist. Respond only with valid JSON.",
                     },
                     {"role": "user", "content": prompt},
                 ],
                 temperature=self.config.labeling_temperature,
-                max_tokens=500,
+                max_tokens=1000,
                 response_format={"type": "json_object"},
             )
 
-            import json
             result = json.loads(response.choices[0].message.content)
 
-            return {
-                "label": label_name,
-                "assign": result.get("assign_label", False),
-                "confidence": result.get("confidence", 0.0),
-                "reasoning": result.get("reasoning", ""),
-            }
+            # Process categories - filter by per-category threshold
+            category_labels = []
+            for cat in result.get("categories", []):
+                cat_id = cat.get("id", "")
+                confidence = cat.get("confidence", 0.0)
+
+                # Use per-category threshold if available
+                threshold = taxonomy.get_confidence_threshold(cat_id)
+
+                if confidence >= threshold:
+                    # Validate category exists in taxonomy
+                    category_info = taxonomy.get_category_by_id(cat_id)
+                    if category_info:
+                        category_labels.append(
+                            CategoryLabel(
+                                id=cat_id,
+                                name=category_info.get("name", cat.get("name", "")),
+                                confidence=confidence,
+                                reasoning=cat.get("reasoning", "")
+                            )
+                        )
+
+            # Limit to max categories
+            category_labels = category_labels[:max_categories]
+
+            # Check for novelty
+            novelty_detected = result.get("novelty_detected", False)
+            novelty_reasoning = result.get("novelty_reasoning")
+
+            # If no categories assigned and novelty not flagged, detect novelty
+            if not category_labels and not novelty_detected:
+                novelty_detected = True
+                novelty_reasoning = "No categories matched with sufficient confidence"
+
+            return category_labels, novelty_detected, novelty_reasoning
 
         except Exception as e:
-            return {
-                "label": label_name,
-                "assign": False,
-                "confidence": 0.0,
-                "reasoning": f"Error: {str(e)}",
-            }
-
-    async def _assign_historical_labels(
-        self,
-        title: str,
-        description: str,
-        domain: str,
-        similar_tickets: List[Dict[str, Any]],
-    ) -> tuple[List[LabelWithConfidence], Dict[str, str]]:
-        """Assign labels based on similar historical tickets."""
-        candidate_labels = self._extract_candidate_labels(similar_tickets)
-        if not candidate_labels:
-            return [], {}
-
-        label_distribution = self._calculate_label_distribution(similar_tickets)
-
-        # Evaluate all labels in parallel
-        tasks = [
-            self._evaluate_historical_label(
-                label, title, description, domain, label_distribution
-            )
-            for label in candidate_labels
-        ]
-        results = await asyncio.gather(*tasks)
-
-        # Filter by confidence threshold
-        historical_labels = []
-        for result in results:
-            if (
-                result["assign"]
-                and result["confidence"] >= self.config.label_confidence_threshold
-            ):
-                historical_labels.append(
-                    LabelWithConfidence(
-                        label=result["label"],
-                        confidence=result["confidence"],
-                        category="historical",
-                        reasoning=result["reasoning"],
-                    )
-                )
-
-        # Format distribution for output
-        distribution = {
-            label: info["formatted"]
-            for label, info in label_distribution.items()
-        }
-
-        return historical_labels, distribution
+            return [], True, f"Classification error: {str(e)}"
 
     async def _generate_business_labels(
         self,
@@ -292,7 +380,6 @@ Output JSON with up to {self.config.max_business_labels} labels:
                 response_format={"type": "json_object"},
             )
 
-            import json
             result = json.loads(response.choices[0].message.content)
 
             labels = []
@@ -369,7 +456,6 @@ Output JSON with up to {self.config.max_technical_labels} labels:
                 response_format={"type": "json_object"},
             )
 
-            import json
             result = json.loads(response.choices[0].message.content)
 
             labels = []
@@ -393,69 +479,57 @@ Output JSON with up to {self.config.max_technical_labels} labels:
             return []
 
     async def process(self, request: LabelingRequest) -> LabelingResponse:
-        """
-        Assign labels to a ticket.
-
-        Args:
-            request: LabelingRequest with ticket details and similar tickets
-
-        Returns:
-            LabelingResponse with all label categories
-        """
-        # Get existing labels from similar tickets
-        existing_labels = self._extract_candidate_labels(request.similar_tickets)
-
+        """Assign labels to a ticket."""
         if self.config.enable_ai_labels:
             # Run all label methods in parallel
-            historical_task = self._assign_historical_labels(
+            category_task = self._assign_category_labels(
                 request.title,
                 request.description,
-                request.domain,
-                request.similar_tickets,
+                request.priority,
             )
             business_task = self._generate_business_labels(
                 request.title,
                 request.description,
                 request.domain,
                 request.priority,
-                existing_labels,
+                set(),
             )
             technical_task = self._generate_technical_labels(
                 request.title,
                 request.description,
                 request.domain,
                 request.priority,
-                existing_labels,
+                set(),
             )
 
-            (historical_labels, distribution), business_labels, technical_labels = (
-                await asyncio.gather(historical_task, business_task, technical_task)
+            (category_labels, novelty_detected, novelty_reasoning), business_labels, technical_labels = (
+                await asyncio.gather(category_task, business_task, technical_task)
             )
         else:
-            historical_labels, distribution = await self._assign_historical_labels(
+            category_labels, novelty_detected, novelty_reasoning = await self._assign_category_labels(
                 request.title,
                 request.description,
-                request.domain,
-                request.similar_tickets,
+                request.priority,
             )
             business_labels = []
             technical_labels = []
 
         # Combine all unique labels
         all_labels = set()
-        for label in historical_labels:
-            all_labels.add(label.label)
+        for label in category_labels:
+            all_labels.add(f"[CAT] {label.name}")
         for label in business_labels:
             all_labels.add(f"[BIZ] {label.label}")
         for label in technical_labels:
             all_labels.add(f"[TECH] {label.label}")
 
         return LabelingResponse(
-            historical_labels=historical_labels,
+            category_labels=category_labels,
             business_labels=business_labels,
             technical_labels=technical_labels,
             all_labels=list(all_labels),
-            label_distribution=distribution,
+            novelty_detected=novelty_detected,
+            novelty_reasoning=novelty_reasoning,
         )
 
     async def health_check(self) -> Dict[str, Any]:

@@ -1,13 +1,171 @@
 """
 Prompt templates for label assignment using binary classifiers.
 Includes templates for:
-- Historical label assignment (from similar tickets)
+- Category classification (from predefined taxonomy)
 - Business label generation (AI-generated)
 - Technical label generation (AI-generated)
 """
 
 # ============================================================================
-# HISTORICAL LABEL ASSIGNMENT TEMPLATE (Existing)
+# CATEGORY CLASSIFICATION TEMPLATE (Replaces Historical Labels)
+# ============================================================================
+
+CATEGORY_CLASSIFICATION_TEMPLATE = """You are a ticket classification specialist for healthcare IT systems.
+
+Task: Classify the ticket into the most appropriate categories from the taxonomy below.
+
+=== TICKET ===
+Title: {title}
+Description: {description}
+Priority: {priority}
+
+=== CATEGORY TAXONOMY ({total_categories} categories) ===
+{category_definitions}
+
+=== CLASSIFICATION RULES ===
+1. Match based on description, keywords, and examples for each category
+2. Assign up to {max_categories} most relevant categories
+3. Only include categories where you have high confidence (>= {confidence_threshold})
+4. If no category matches with sufficient confidence, set novelty_detected=true
+5. Provide specific reasoning for each category assignment
+
+Output JSON:
+{{
+  "categories": [
+    {{
+      "id": "category_id",
+      "name": "Category Name",
+      "confidence": 0.0-1.0,
+      "reasoning": "Specific evidence from ticket that matches this category"
+    }}
+  ],
+  "novelty_detected": false,
+  "novelty_reasoning": null
+}}
+
+Respond ONLY with valid JSON."""
+
+
+def get_category_classification_prompt(
+    title: str,
+    description: str,
+    priority: str,
+    category_definitions: str,
+    total_categories: int,
+    max_categories: int,
+    confidence_threshold: float
+) -> str:
+    """
+    Generate category classification prompt.
+
+    Args:
+        title: Ticket title
+        description: Ticket description
+        priority: Ticket priority
+        category_definitions: Formatted category definitions
+        total_categories: Total number of categories
+        max_categories: Maximum categories to assign
+        confidence_threshold: Minimum confidence threshold
+
+    Returns:
+        Formatted prompt
+    """
+    return CATEGORY_CLASSIFICATION_TEMPLATE.format(
+        title=title,
+        description=description,
+        priority=priority,
+        category_definitions=category_definitions,
+        total_categories=total_categories,
+        max_categories=max_categories,
+        confidence_threshold=confidence_threshold
+    )
+
+
+# ============================================================================
+# BINARY CATEGORY CLASSIFICATION TEMPLATE (For Hybrid Semantic + LLM)
+# ============================================================================
+
+BINARY_CATEGORY_CLASSIFICATION_TEMPLATE = """You are a ticket classification specialist for healthcare IT systems.
+
+Your task is to determine if this ticket belongs to ONE SPECIFIC category.
+
+=== TICKET ===
+Title: {title}
+Description: {description}
+Priority: {priority}
+
+=== CATEGORY TO EVALUATE ===
+ID: {category_id}
+Name: {category_name}
+Description: {category_description}
+Keywords: {category_keywords}
+Examples: {category_examples}
+
+=== DECISION CRITERIA ===
+Answer: Does this ticket belong to the "{category_name}" category?
+
+Consider:
+1. Does the ticket content align with the category description?
+2. Are relevant keywords present in the ticket?
+3. Would this ticket be similar to the example scenarios?
+4. Is this the RIGHT category, not just a tangentially related one?
+
+Output JSON:
+{{
+  "decision": true or false,
+  "confidence": 0.0-1.0,
+  "reasoning": "Brief explanation of why this ticket does or doesn't match this category"
+}}
+
+Be precise. Only return true if you are confident this category is appropriate.
+Respond ONLY with valid JSON."""
+
+
+def get_binary_classification_prompt(
+    title: str,
+    description: str,
+    priority: str,
+    category_id: str,
+    category_name: str,
+    category_description: str,
+    category_keywords: str,
+    category_examples: str
+) -> str:
+    """
+    Generate binary classification prompt for a single category.
+
+    Used in the hybrid semantic + LLM classification pipeline.
+    After semantic pre-filtering identifies top-5 candidates, this prompt
+    is used to run parallel binary classifiers for each candidate.
+
+    Args:
+        title: Ticket title
+        description: Ticket description
+        priority: Ticket priority
+        category_id: Category ID to evaluate
+        category_name: Category name
+        category_description: Category description
+        category_keywords: Comma-separated keywords
+        category_examples: Comma-separated example scenarios
+
+    Returns:
+        Formatted prompt for binary classification
+    """
+    return BINARY_CATEGORY_CLASSIFICATION_TEMPLATE.format(
+        title=title,
+        description=description,
+        priority=priority,
+        category_id=category_id,
+        category_name=category_name,
+        category_description=category_description,
+        category_keywords=category_keywords,
+        category_examples=category_examples
+    )
+
+
+# ============================================================================
+# DEPRECATED: HISTORICAL LABEL ASSIGNMENT TEMPLATE
+# Kept for reference but no longer used
 # ============================================================================
 
 LABEL_ASSIGNMENT_TEMPLATE = """You are a label assignment specialist for technical support tickets.

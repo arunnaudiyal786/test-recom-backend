@@ -40,10 +40,8 @@ class TicketWorkflowState(TypedDict, total=False):
     search_metadata: Optional[Dict]
 
     # ========== Labeling Output ==========
-    # Historical Labels (from similar tickets)
-    historical_labels: Optional[List[str]]
-    historical_label_confidence: Optional[Dict[str, float]]
-    historical_label_distribution: Optional[Dict[str, str]]
+    # Category Labels (from predefined taxonomy - replaces historical_labels)
+    category_labels: Optional[List[Dict]]  # [{id, name, confidence, reasoning}]
 
     # AI-Generated Business Labels
     business_labels: Optional[List[Dict]]  # [{label, confidence, reasoning}]
@@ -53,8 +51,21 @@ class TicketWorkflowState(TypedDict, total=False):
 
     # Combined (for backward compatibility)
     assigned_labels: Optional[List[str]]
-    label_confidence: Optional[Dict[str, float]]
-    label_distribution: Optional[Dict[str, str]]
+
+    # Ticket embedding (passed through for novelty detection)
+    ticket_embedding: Optional[List[float]]  # 3072-dimensional embedding vector
+
+    # All category similarity scores (for novelty detection entropy calculation)
+    all_category_scores: Optional[List[Dict]]  # [{category_id, score}, ...]
+
+    # ========== Novelty Detection Output ==========
+    # Multi-signal novelty detection results
+    novelty_detected: Optional[bool]  # True if ticket doesn't fit any category well
+    novelty_score: Optional[float]  # Combined novelty score (0-1)
+    novelty_signals: Optional[Dict]  # Individual signal details
+    novelty_recommendation: Optional[str]  # "proceed" | "flag_for_review" | "escalate"
+    novelty_reasoning: Optional[str]  # Human-readable explanation
+    novelty_details: Optional[Dict]  # Additional details (signals_fired, nearest_category, etc.)
 
     # ========== Resolution Output ==========
     resolution_plan: Optional[Dict]

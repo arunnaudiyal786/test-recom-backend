@@ -14,11 +14,20 @@ class LabelWithConfidence(BaseModel):
     label: str = Field(description="Label name")
     confidence: float = Field(description="Confidence score (0-1)")
     category: str = Field(
-        description="Label category: 'historical', 'business', or 'technical'"
+        description="Label category: 'category', 'business', or 'technical'"
     )
     reasoning: Optional[str] = Field(
         default=None, description="Reasoning for this label assignment"
     )
+
+
+class CategoryLabel(BaseModel):
+    """A category assignment from the predefined taxonomy."""
+
+    id: str = Field(description="Category ID from taxonomy (e.g., 'batch_enrollment_maintenance')")
+    name: str = Field(description="Human-readable category name")
+    confidence: float = Field(description="Confidence score (0-1)")
+    reasoning: Optional[str] = Field(default=None, description="Why this category applies")
 
 
 class SimilarTicketInput(BaseModel):
@@ -66,8 +75,8 @@ class LabelingRequest(BaseModel):
 class LabelingResponse(BaseModel):
     """Response model for label assignment."""
 
-    historical_labels: List[LabelWithConfidence] = Field(
-        description="Labels derived from similar historical tickets"
+    category_labels: List[CategoryLabel] = Field(
+        description="Categories from predefined taxonomy (replaces historical_labels)"
     )
     business_labels: List[LabelWithConfidence] = Field(
         description="AI-generated business-oriented labels"
@@ -78,6 +87,11 @@ class LabelingResponse(BaseModel):
     all_labels: List[str] = Field(
         description="Combined unique labels for convenience"
     )
-    label_distribution: Dict[str, str] = Field(
-        description="Distribution of labels in similar tickets (e.g., '14/20')"
+    novelty_detected: bool = Field(
+        default=False,
+        description="True if ticket doesn't fit well into any category"
+    )
+    novelty_reasoning: Optional[str] = Field(
+        default=None,
+        description="Explanation if novelty was detected"
     )

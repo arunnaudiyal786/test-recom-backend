@@ -72,6 +72,35 @@ async def resolution_node(state: Dict[str, Any]) -> Dict[str, Any]:
         confidence = result.get("confidence", 0.0)
         actual_prompt = result.get("actual_prompt", "")
 
+        # Check for novelty detection results and add warnings if needed
+        novelty_detected = state.get("novelty_detected", False)
+        novelty_score = state.get("novelty_score", 0.0)
+        novelty_recommendation = state.get("novelty_recommendation", "proceed")
+
+        if novelty_detected:
+            # Add novelty warning to resolution plan
+            if "warnings" not in resolution_plan:
+                resolution_plan["warnings"] = []
+
+            resolution_plan["warnings"].append({
+                "type": "novelty_detected",
+                "severity": "high" if novelty_score > 0.8 else "medium",
+                "score": novelty_score,
+                "recommendation": novelty_recommendation,
+                "message": f"This ticket may represent a novel category (score: {novelty_score:.2f}). Consider reviewing the category taxonomy."
+            })
+
+            # Also add to additional_considerations
+            if "additional_considerations" not in resolution_plan:
+                resolution_plan["additional_considerations"] = []
+
+            resolution_plan["additional_considerations"].append(
+                f"NOVELTY WARNING: Ticket may not fit existing categories (novelty score: {novelty_score:.2f}). "
+                f"Recommendation: {novelty_recommendation}. Consider adding a new category to the taxonomy if this pattern recurs."
+            )
+
+            print(f"   ⚠️  Novelty warning added (score: {novelty_score:.2f})")
+
         print(f"   ✅ Generated resolution plan with confidence {confidence:.2%}")
         print(f"   📋 {len(resolution_plan.get('diagnostic_steps', []))} diagnostic steps")
         print(f"   📋 {len(resolution_plan.get('resolution_steps', []))} resolution steps")
@@ -84,7 +113,8 @@ async def resolution_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "current_agent": "resolution",
             "messages": [{
                 "role": "assistant",
-                "content": f"Generated resolution plan with {confidence:.2%} confidence"
+                "content": f"Generated resolution plan with {confidence:.2%} confidence" +
+                           (f" (NOVELTY DETECTED: {novelty_score:.2f})" if novelty_detected else "")
             }]
         }
 

@@ -1,206 +1,340 @@
 """
 Labeling Tools - LangChain @tool decorated functions for label assignment.
 
-These tools handle historical label extraction, evaluation, and AI-generated labels.
+These tools handle category classification using a hybrid semantic + LLM approach:
+1. Semantic pre-filtering: Compute cosine similarity between ticket and category embeddings
+2. LLM binary classification: Run parallel binary classifiers for top-K candidates
+3. Ensemble scoring: Combine 40% semantic + 60% LLM confidence
+4. Filter and output: Apply threshold and limit to max categories
 """
 
-import asyncio
 import json
-from typing import Dict, Any, List, Set
+import asyncio
+from typing import Dict, Any, List, Tuple
 
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
+from openai import OpenAI
 
 from src.utils.config import Config
+from src.prompts.label_assignment_prompts import (
+    get_category_classification_prompt,
+    get_binary_classification_prompt
+)
+from components.labeling.service import CategoryTaxonomy
+from components.labeling.category_embeddings import CategoryEmbeddings
 
 
-@tool
-def extract_candidate_labels(similar_tickets: List[Dict[str, Any]]) -> Dict[str, Any]:
+async def _generate_ticket_embedding(title: str, description: str) -> List[float]:
     """
-    Extract unique labels and their frequency from similar historical tickets.
+    Generate embedding for a ticket using OpenAI's embedding model.
 
     Args:
-        similar_tickets: List of similar ticket dicts with 'labels' field
+        title: Ticket title
+        description: Ticket description
 
     Returns:
-        Dict containing:
-        - candidate_labels: Set of unique labels
-        - label_distribution: Dict mapping label to {count, percentage, formatted}
+        List of floats representing the embedding vector
     """
-    labels = set()
-    label_counts = {}
-    total = len(similar_tickets)
+    client = OpenAI(api_key=Config.OPENAI_API_KEY)
 
-    for ticket in similar_tickets:
-        ticket_labels = ticket.get("labels", [])
-        if isinstance(ticket_labels, list):
-            labels.update(ticket_labels)
-            for label in ticket_labels:
-                label_counts[label] = label_counts.get(label, 0) + 1
+    # Combine title and description for embedding
+    text = f"{title} {description}"
 
-    distribution = {
-        label: {
-            "count": count,
-            "percentage": count / total if total > 0 else 0,
-            "formatted": f"{count}/{total}"
-        }
-        for label, count in label_counts.items()
-    }
+    response = client.embeddings.create(
+        model=Config.EMBEDDING_MODEL,
+        input=text
+    )
 
-    return {
-        "candidate_labels": list(labels),
-        "label_distribution": distribution,
-        "total_tickets": total
-    }
+    return response.data[0].embedding
 
 
-async def _evaluate_single_label(
-    label_name: str,
+async def _binary_classify_category(
     title: str,
     description: str,
-    domain: str,
-    frequency: str,
+    priority: str,
+    category_id: str,
+    category_info: Dict[str, Any],
     llm: ChatOpenAI
 ) -> Dict[str, Any]:
     """
-    Internal function to evaluate a single label using binary classifier.
+    Run binary classification for a single category.
 
     Args:
-        label_name: Label to evaluate
         title: Ticket title
         description: Ticket description
-        domain: Classified domain
-        frequency: Label frequency string (e.g., "5/20")
+        priority: Ticket priority
+        category_id: Category ID to evaluate
+        category_info: Category metadata from taxonomy
         llm: ChatOpenAI instance
 
     Returns:
-        Evaluation result dict
+        Dict with decision, confidence, reasoning
     """
-    system_prompt = "You are a label classification expert. Respond only with valid JSON."
-    user_prompt = f"""You are a label validation expert for technical support tickets.
+    # Format category details for prompt
+    keywords = ", ".join(category_info.get("keywords", []))
+    examples = ", ".join(category_info.get("examples", []))
 
-Evaluate whether the label "{label_name}" should be assigned to this ticket.
-
-Historical frequency: This label appears in {frequency} similar historical tickets.
-
-Ticket:
-Title: {title}
-Description: {description}
-Domain: {domain}
-
-Consider:
-1. Does the ticket content match the label semantics?
-2. Is the historical frequency a strong indicator?
-3. What is your confidence level?
-
-Output JSON:
-{{
-  "assign_label": true or false,
-  "confidence": 0.0 to 1.0,
-  "reasoning": "brief explanation"
-}}"""
+    prompt = get_binary_classification_prompt(
+        title=title,
+        description=description,
+        priority=priority,
+        category_id=category_id,
+        category_name=category_info.get("name", ""),
+        category_description=category_info.get("description", ""),
+        category_keywords=keywords,
+        category_examples=examples
+    )
 
     try:
         response = await llm.ainvoke([
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "system", "content": "You are a ticket classification specialist. Respond only with valid JSON."},
+            {"role": "user", "content": prompt}
         ])
 
         result = json.loads(response.content)
         return {
-            "label": label_name,
-            "assign": result.get("assign_label", False),
+            "category_id": category_id,
+            "decision": result.get("decision", False),
             "confidence": result.get("confidence", 0.0),
-            "reasoning": result.get("reasoning", ""),
-            "actual_prompt": user_prompt
+            "reasoning": result.get("reasoning", "")
         }
 
     except Exception as e:
         return {
-            "label": label_name,
-            "assign": False,
+            "category_id": category_id,
+            "decision": False,
             "confidence": 0.0,
-            "reasoning": f"Error: {str(e)}",
-            "actual_prompt": user_prompt
+            "reasoning": f"Classification error: {str(e)}"
         }
 
 
 @tool
-async def evaluate_historical_labels(
+async def classify_ticket_categories(
     title: str,
     description: str,
-    domain: str,
-    candidate_labels: List[str],
-    label_distribution: Dict[str, Dict],
-    confidence_threshold: float = 0.7
+    priority: str
 ) -> Dict[str, Any]:
     """
-    Evaluate historical labels using parallel binary classifiers.
+    Classify a ticket into categories using hybrid semantic + LLM approach.
 
-    Runs a binary classifier for each candidate label to determine
-    if it should be assigned to the current ticket.
+    Pipeline:
+    STEP 1: Generate ticket embedding (1 API call)
+    STEP 2: Compute cosine similarity to all 25 category embeddings (no API call)
+    STEP 3: Select TOP-5 candidates above similarity threshold (0.3)
+    STEP 4: Run parallel binary classifiers for TOP-5 (5 API calls)
+    STEP 5: Compute ensemble scores: 0.4 * semantic + 0.6 * LLM confidence
+    STEP 6: Filter by threshold and limit to max 3 categories
 
     Args:
         title: Ticket title
         description: Ticket description
-        domain: Classified domain
-        candidate_labels: List of candidate labels to evaluate
-        label_distribution: Dict mapping label to frequency info
-        confidence_threshold: Minimum confidence to assign label (default 0.7)
+        priority: Ticket priority
 
     Returns:
         Dict containing:
-        - assigned_labels: List of labels that passed threshold
-        - label_confidence: Dict mapping label to confidence score
-        - all_evaluations: Full evaluation results for all labels
+        - assigned_categories: List of category dicts with id, name, confidence, reasoning
+        - novelty_detected: Boolean if ticket might be a novel category
+        - novelty_reasoning: Explanation if novelty detected
+        - semantic_candidates: Top-K candidates from semantic search (for debugging)
+        - pipeline_info: Execution info about each step
     """
-    if not candidate_labels:
+    taxonomy = CategoryTaxonomy.get_instance()
+    category_embeddings = CategoryEmbeddings.get_instance()
+
+    # Config values
+    top_k = Config.SEMANTIC_TOP_K_CANDIDATES
+    semantic_threshold = Config.SEMANTIC_SIMILARITY_THRESHOLD
+    semantic_weight = Config.ENSEMBLE_SEMANTIC_WEIGHT
+    llm_weight = Config.ENSEMBLE_LLM_WEIGHT
+    max_categories = Config.CATEGORY_MAX_LABELS_PER_TICKET
+
+    pipeline_info = {
+        "step1_embedding": "pending",
+        "step2_similarity": "pending",
+        "step3_candidates": "pending",
+        "step4_binary_classifiers": "pending",
+        "step5_ensemble": "pending",
+        "step6_filtering": "pending"
+    }
+
+    try:
+        # ================================================================
+        # STEP 1: Generate ticket embedding
+        # ================================================================
+        pipeline_info["step1_embedding"] = "in_progress"
+        ticket_embedding = await _generate_ticket_embedding(title, description)
+        pipeline_info["step1_embedding"] = "completed"
+
+        # ================================================================
+        # STEP 2: Compute cosine similarity to all category embeddings
+        # ================================================================
+        pipeline_info["step2_similarity"] = "in_progress"
+
+        if not category_embeddings.is_loaded():
+            return {
+                "assigned_categories": [],
+                "novelty_detected": True,
+                "novelty_reasoning": "Category embeddings not loaded. Run: python scripts/generate_category_embeddings.py",
+                "semantic_candidates": [],
+                "pipeline_info": pipeline_info
+            }
+
+        all_similarities = category_embeddings.compute_similarities(ticket_embedding)
+        pipeline_info["step2_similarity"] = f"completed ({len(all_similarities)} categories)"
+
+        # ================================================================
+        # STEP 3: Select TOP-K candidates above threshold
+        # ================================================================
+        pipeline_info["step3_candidates"] = "in_progress"
+        candidates = category_embeddings.get_top_k_candidates(
+            ticket_embedding,
+            top_k=top_k,
+            threshold=semantic_threshold
+        )
+        pipeline_info["step3_candidates"] = f"completed ({len(candidates)} candidates)"
+
+        # Store semantic candidates for debugging
+        semantic_candidates = [
+            {"category_id": cat_id, "semantic_score": score}
+            for cat_id, score in candidates
+        ]
+
+        # If no candidates above threshold, detect novelty
+        if not candidates:
+            pipeline_info["step4_binary_classifiers"] = "skipped (no candidates)"
+            pipeline_info["step5_ensemble"] = "skipped"
+            pipeline_info["step6_filtering"] = "skipped"
+
+            return {
+                "assigned_categories": [],
+                "novelty_detected": True,
+                "novelty_reasoning": f"No categories matched with semantic similarity >= {semantic_threshold}",
+                "semantic_candidates": semantic_candidates,
+                "pipeline_info": pipeline_info
+            }
+
+        # ================================================================
+        # STEP 4: Run parallel binary classifiers for TOP-K candidates
+        # ================================================================
+        pipeline_info["step4_binary_classifiers"] = "in_progress"
+
+        llm = ChatOpenAI(
+            model=Config.CATEGORY_CLASSIFICATION_MODEL,
+            temperature=Config.CATEGORY_CLASSIFICATION_TEMPERATURE,
+            model_kwargs={"response_format": {"type": "json_object"}}
+        )
+
+        # Create tasks for parallel execution
+        binary_tasks = []
+        for cat_id, semantic_score in candidates:
+            category_info = taxonomy.get_category_by_id(cat_id)
+            if category_info:
+                binary_tasks.append(
+                    _binary_classify_category(
+                        title, description, priority,
+                        cat_id, category_info, llm
+                    )
+                )
+
+        # Run all binary classifiers in parallel
+        binary_results = await asyncio.gather(*binary_tasks)
+        pipeline_info["step4_binary_classifiers"] = f"completed ({len(binary_results)} classifiers)"
+
+        # ================================================================
+        # STEP 5: Compute ensemble scores
+        # ================================================================
+        pipeline_info["step5_ensemble"] = "in_progress"
+
+        # Create lookup for semantic scores
+        semantic_scores = {cat_id: score for cat_id, score in candidates}
+
+        # Compute ensemble scores for categories where decision=True
+        ensemble_results = []
+        for result in binary_results:
+            if result["decision"]:
+                cat_id = result["category_id"]
+                semantic_score = semantic_scores.get(cat_id, 0.0)
+                llm_confidence = result["confidence"]
+
+                # Ensemble: 40% semantic + 60% LLM
+                ensemble_score = (semantic_weight * semantic_score) + (llm_weight * llm_confidence)
+
+                ensemble_results.append({
+                    "category_id": cat_id,
+                    "ensemble_score": ensemble_score,
+                    "semantic_score": semantic_score,
+                    "llm_confidence": llm_confidence,
+                    "reasoning": result["reasoning"]
+                })
+
+        pipeline_info["step5_ensemble"] = f"completed ({len(ensemble_results)} positive decisions)"
+
+        # ================================================================
+        # STEP 6: Filter by threshold and limit to max categories
+        # ================================================================
+        pipeline_info["step6_filtering"] = "in_progress"
+
+        # Sort by ensemble score descending
+        ensemble_results.sort(key=lambda x: x["ensemble_score"], reverse=True)
+
+        assigned_categories = []
+        for result in ensemble_results:
+            cat_id = result["category_id"]
+
+            # Use per-category threshold if available
+            threshold = taxonomy.get_confidence_threshold(cat_id)
+
+            if result["ensemble_score"] >= threshold:
+                category_info = taxonomy.get_category_by_id(cat_id)
+                if category_info:
+                    assigned_categories.append({
+                        "id": cat_id,
+                        "name": category_info.get("name", ""),
+                        "confidence": round(result["ensemble_score"], 3),
+                        "reasoning": result["reasoning"],
+                        "semantic_score": round(result["semantic_score"], 3),
+                        "llm_confidence": round(result["llm_confidence"], 3)
+                    })
+
+        # Limit to max categories
+        assigned_categories = assigned_categories[:max_categories]
+        pipeline_info["step6_filtering"] = f"completed ({len(assigned_categories)} categories assigned)"
+
+        # Detect novelty if no categories assigned
+        novelty_detected = len(assigned_categories) == 0
+        novelty_reasoning = None
+        if novelty_detected:
+            novelty_reasoning = "No categories passed ensemble threshold after binary classification"
+
+        # Format all similarity scores for novelty detection
+        all_similarity_scores = [
+            {"category_id": cat_id, "score": score}
+            for cat_id, score in all_similarities
+        ]
+
         return {
-            "assigned_labels": [],
-            "label_confidence": {},
-            "all_evaluations": [],
-            "sample_prompt": "[No historical labels to evaluate - no similar tickets found with labels]"
+            "assigned_categories": assigned_categories,
+            "novelty_detected": novelty_detected,
+            "novelty_reasoning": novelty_reasoning,
+            "semantic_candidates": semantic_candidates,
+            "pipeline_info": pipeline_info,
+            # NEW: Pass through for novelty detection
+            "ticket_embedding": ticket_embedding,
+            "all_similarity_scores": all_similarity_scores
         }
 
-    llm = ChatOpenAI(
-        model=Config.CLASSIFICATION_MODEL,
-        temperature=0.2,
-        model_kwargs={"response_format": {"type": "json_object"}}
-    )
-
-    # Evaluate all labels in parallel
-    tasks = [
-        _evaluate_single_label(
-            label,
-            title,
-            description,
-            domain,
-            label_distribution.get(label, {}).get("formatted", "0/0"),
-            llm
-        )
-        for label in candidate_labels
-    ]
-    results = await asyncio.gather(*tasks)
-
-    # Filter by threshold
-    assigned_labels = []
-    label_confidence = {}
-    sample_prompt = None
-
-    for result in results:
-        label_confidence[result["label"]] = result["confidence"]
-        if result["assign"] and result["confidence"] >= confidence_threshold:
-            assigned_labels.append(result["label"])
-        # Capture the first prompt as a sample
-        if sample_prompt is None and result.get("actual_prompt"):
-            sample_prompt = result["actual_prompt"]
-
-    return {
-        "assigned_labels": assigned_labels,
-        "label_confidence": label_confidence,
-        "all_evaluations": results,
-        "sample_prompt": sample_prompt
-    }
+    except Exception as e:
+        pipeline_info["error"] = str(e)
+        return {
+            "assigned_categories": [],
+            "novelty_detected": True,
+            "novelty_reasoning": f"Classification error: {str(e)}",
+            "semantic_candidates": [],
+            "pipeline_info": pipeline_info,
+            "ticket_embedding": [],
+            "all_similarity_scores": []
+        }
 
 
 @tool
