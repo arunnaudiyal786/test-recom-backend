@@ -15,6 +15,7 @@ from components.labeling.tools import (
     generate_business_labels,
     generate_technical_labels
 )
+from config import Config
 
 
 async def labeling_node(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -50,26 +51,26 @@ async def labeling_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "priority": priority
         })
 
-        # 2. Business labels (unchanged)
+        # 2. Business labels (uses Config for max count)
         business_task = generate_business_labels.ainvoke({
             "title": title,
             "description": description,
             "domain": domain,
             "priority": priority,
             "existing_labels": [],  # No historical labels to avoid
-            "max_labels": 5,
-            "confidence_threshold": 0.7
+            "max_labels": Config.BUSINESS_LABEL_MAX_COUNT,
+            "confidence_threshold": Config.GENERATED_LABEL_CONFIDENCE_THRESHOLD
         })
 
-        # 3. Technical labels (unchanged)
+        # 3. Technical labels (uses Config for max count)
         technical_task = generate_technical_labels.ainvoke({
             "title": title,
             "description": description,
             "domain": domain,
             "priority": priority,
             "existing_labels": [],  # No historical labels to avoid
-            "max_labels": 5,
-            "confidence_threshold": 0.7
+            "max_labels": Config.TECHNICAL_LABEL_MAX_COUNT,
+            "confidence_threshold": Config.GENERATED_LABEL_CONFIDENCE_THRESHOLD
         })
 
         # Wait for all tasks

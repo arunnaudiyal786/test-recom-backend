@@ -14,7 +14,7 @@ from tqdm import tqdm
 from src.vectorstore.embedding_generator import get_embedding_generator
 from src.vectorstore.faiss_manager import get_faiss_manager
 from src.utils.helpers import combine_ticket_text
-from src.utils.config import Config
+from config import Config
 from src.utils.schema_config import get_schema_config
 
 

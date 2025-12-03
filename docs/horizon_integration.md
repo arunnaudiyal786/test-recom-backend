@@ -73,7 +73,7 @@ from typing import List, Dict, Any, Optional
 # Import your Horizon SDK here
 # from horizon import AsyncHorizonClient  # Example import
 
-from src.utils.config import Config
+from config import Config
 
 
 class HorizonClient:
@@ -252,7 +252,7 @@ If Horizon has a different API format:
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, AIMessage
 from typing import List, Optional, Any
-from src.utils.config import Config
+from config import Config
 
 
 class HorizonChatModel(BaseChatModel):
@@ -372,7 +372,7 @@ cp .env.example .env
 # Edit .env with your HORIZON_API_KEY
 
 # 2. Test configuration loads
-python3 -c "from src.utils.config import Config; print('Config OK')"
+python3 -c "from config import Config; print('Config OK')"
 
 # 3. Test client initialization
 python3 -c "from src.utils.horizon_client import get_horizon_client; print('Client OK')"

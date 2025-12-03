@@ -6,7 +6,7 @@ import numpy as np
 import faiss
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
-from src.utils.config import Config
+from config import Config
 
 
 class FAISSManager:

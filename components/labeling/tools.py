@@ -16,7 +16,7 @@ from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
 
-from src.utils.config import Config
+from config import Config
 from src.prompts.label_assignment_prompts import (
     get_category_classification_prompt,
     get_binary_classification_prompt

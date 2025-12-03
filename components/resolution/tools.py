@@ -11,7 +11,7 @@ from typing import Dict, Any, List
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 
-from src.utils.config import Config
+from config import Config
 from components.resolution.models import (
     DiagnosticStep,
     ResolutionStep,

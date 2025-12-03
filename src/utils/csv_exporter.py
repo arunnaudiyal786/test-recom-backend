@@ -67,7 +67,7 @@ def export_ticket_results_to_csv(
     """
     # Default output path
     if output_path is None:
-        from src.utils.config import Config
+        from config import Config
         output_path = Config.PROJECT_ROOT / "output" / "ticket_results.csv"
 
     # Ensure output directory exists
@@ -163,7 +163,7 @@ def export_batch_results_to_csv(
 
     # Default output path with timestamp
     if output_path is None:
-        from src.utils.config import Config
+        from config import Config
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         output_path = Config.PROJECT_ROOT / "output" / f"ticket_results_batch_{timestamp}.csv"
 

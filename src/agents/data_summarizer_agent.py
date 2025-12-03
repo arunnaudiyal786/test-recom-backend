@@ -13,7 +13,7 @@ import pandas as pd
 
 from src.models.data_prep_state import DataPrepState, DataPrepAgentOutput
 from src.utils.openai_client import get_openai_client
-from src.utils.config import Config
+from config import Config
 from src.prompts.summarization_prompts import get_ticket_summarization_prompt
 
 

@@ -24,7 +24,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from openai import OpenAI
-from src.utils.config import Config
+from config import Config
 
 
 def generate_category_embeddings():

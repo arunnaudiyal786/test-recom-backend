@@ -13,7 +13,7 @@ import faiss
 from langchain_core.tools import tool
 from langchain_openai import OpenAIEmbeddings
 
-from src.utils.config import Config
+from config import Config
 
 
 # Module-level cache for FAISS index and metadata

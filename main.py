@@ -14,7 +14,7 @@ from typing import Dict, Any
 from src.orchestrator.workflow import get_workflow, visualize_workflow
 from src.orchestrator.state import TicketWorkflowState
 from src.models.ticket_schema import IncomingTicket, FinalTicketOutput
-from src.utils.config import Config
+from config import Config
 from src.utils.csv_exporter import export_ticket_results_to_csv
 
 

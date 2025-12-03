@@ -24,7 +24,7 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
 
-from src.utils.config import Config
+from config import Config
 
 
 class CategoryEmbeddings:
