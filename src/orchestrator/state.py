@@ -24,6 +24,9 @@ class TicketWorkflowState(TypedDict, total=False):
     priority: str
     metadata: Dict
 
+    # ========== Session Management ==========
+    session_id: Optional[str]  # Unique session ID for output storage (format: ddmmyyyyhhmm)
+
     # ========== Search Configuration (optional, from UI tuning) ==========
     search_config: Optional[Dict]
 

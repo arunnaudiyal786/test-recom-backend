@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from src.orchestrator.workflow import get_workflow, SKIP_DOMAIN_CLASSIFICATION
 from src.orchestrator.state import TicketWorkflowState as TicketState
 from src.utils.csv_exporter import export_ticket_results_to_csv
+from src.utils.session_manager import SessionManager
 from src.models.retrieval_config import (
     RetrievalConfig,
     RetrievalPreviewRequest,
@@ -103,6 +104,11 @@ async def stream_agent_updates(ticket: TicketInput) -> AsyncGenerator[str, None]
     Yields SSE-formatted messages with agent progress updates.
     """
     try:
+        # Initialize session manager and generate unique session ID
+        session_manager = SessionManager()
+        session_id = session_manager.generate_session_id()
+        print(f"📁 Session ID: {session_id}")
+
         # Get compiled workflow
         workflow = get_workflow()
 
@@ -126,6 +132,7 @@ async def stream_agent_updates(ticket: TicketInput) -> AsyncGenerator[str, None]
                 "description": ticket.description,
                 "priority": ticket.priority,
                 "metadata": ticket.metadata,
+                "session_id": session_id,  # Unique session for output storage
                 "search_config": search_config,  # Include custom search config if saved
                 "processing_stage": "retrieval",
                 "status": "processing",
@@ -146,6 +153,7 @@ async def stream_agent_updates(ticket: TicketInput) -> AsyncGenerator[str, None]
                 "description": ticket.description,
                 "priority": ticket.priority,
                 "metadata": ticket.metadata,
+                "session_id": session_id,  # Unique session for output storage
                 "search_config": search_config,  # Include custom search config if saved
                 "processing_stage": "classification",
                 "status": "processing",
@@ -164,6 +172,15 @@ async def stream_agent_updates(ticket: TicketInput) -> AsyncGenerator[str, None]
         # Accumulate full state across all agents (not just last partial update)
         accumulated_state = dict(initial_state)
         previous_message_count = 0  # Track messages we've already sent
+
+        # Save session metadata at start
+        session_manager.save_session_metadata(session_id, {
+            "ticket_id": ticket.ticket_id,
+            "title": ticket.title,
+            "description": ticket.description,
+            "priority": ticket.priority,
+            "metadata": ticket.metadata,
+        })
 
         # Process through workflow with streaming updates
         async for event in workflow.astream(initial_state):
@@ -216,6 +233,16 @@ async def stream_agent_updates(ticket: TicketInput) -> AsyncGenerator[str, None]
                     # Extract agent-specific data
                     agent_data = _extract_agent_data(current_agent, node_state)
 
+                    # Save individual agent output to session directory
+                    try:
+                        session_manager.save_agent_output(
+                            session_id=session_id,
+                            agent_name=_agent_key(current_agent),
+                            data=node_state
+                        )
+                    except Exception as e:
+                        print(f"Warning: Could not save agent output: {e}")
+
                     update = AgentUpdate(
                         agent=_agent_key(current_agent),
                         status="complete",
@@ -240,29 +267,43 @@ async def stream_agent_updates(ticket: TicketInput) -> AsyncGenerator[str, None]
                     return
 
         # Send workflow completion with final state
-        # Save the final state to a file for later retrieval
+        # Save the final state to session directory
         csv_path = None
+        session_dir = None
         try:
-            from pathlib import Path
             import json as json_lib
-            output_dir = Path("output")
-            output_dir.mkdir(exist_ok=True)
 
             if accumulated_state:
-                # Save JSON output (full accumulated state)
-                output_file = output_dir / "ticket_resolution.json"
-                with open(output_file, "w") as f:
-                    json_lib.dump(accumulated_state, f, indent=2, default=str)
+                # Get session output directory
+                session_dir = session_manager.get_session_output_dir(session_id)
 
-                # Export to CSV (labels and similar tickets)
-                csv_path = export_ticket_results_to_csv(accumulated_state)
+                # Save JSON output (full accumulated state) to session directory
+                output_file = session_manager.save_final_output(
+                    session_id=session_id,
+                    data=accumulated_state,
+                    filename="ticket_resolution.json"
+                )
+                print(f"💾 Saved output to: {output_file}")
+
+                # Export to CSV in session directory
+                csv_path = export_ticket_results_to_csv(
+                    accumulated_state,
+                    output_path=session_dir / "ticket_results.csv",
+                    append=False  # Each session gets its own CSV
+                )
                 print(f"📊 Exported results to CSV: {csv_path}")
+
+                # Update 'latest' symlink to point to this session
+                session_manager.update_latest_symlink(session_id)
+
         except Exception as e:
             print(f"Error saving output file: {e}")
 
         completion = {
             "status": "workflow_complete",
             "message": "All agents completed successfully",
+            "session_id": session_id,
+            "session_path": str(session_dir) if session_dir else None,
             "output_available": True,
             "csv_exported": csv_path is not None,
             "csv_path": str(csv_path) if csv_path else None
@@ -535,11 +576,16 @@ async def reload_schema_config_endpoint():
 
 @app.get("/api/output")
 async def get_output():
-    """Retrieve the final ticket resolution JSON output."""
+    """Retrieve the final ticket resolution JSON output from latest session."""
     from pathlib import Path
 
     try:
-        output_path = Path("output/ticket_resolution.json")
+        # Try latest symlink first (session-based)
+        output_path = Path("output/latest/ticket_resolution.json")
+        if not output_path.exists():
+            # Fallback to legacy flat path for backward compatibility
+            output_path = Path("output/ticket_resolution.json")
+
         if not output_path.exists():
             raise HTTPException(status_code=404, detail="Output file not found. Process a ticket first.")
 
@@ -555,11 +601,16 @@ async def get_output():
 
 @app.get("/api/download-csv")
 async def download_csv():
-    """Download the ticket results CSV file."""
+    """Download the ticket results CSV file from latest session."""
     from pathlib import Path
 
     try:
-        csv_path = Path("output/ticket_results.csv")
+        # Try latest symlink first (session-based)
+        csv_path = Path("output/latest/ticket_results.csv")
+        if not csv_path.exists():
+            # Fallback to legacy flat path for backward compatibility
+            csv_path = Path("output/ticket_results.csv")
+
         if not csv_path.exists():
             raise HTTPException(
                 status_code=404,
@@ -757,6 +808,144 @@ async def load_search_config():
         )
 
 
+# ============================================================================
+# Session Management Endpoints
+# ============================================================================
+
+@app.get("/api/sessions")
+async def list_sessions(limit: int = 50):
+    """
+    List all processing sessions.
+
+    Returns a list of sessions with metadata, sorted by date (newest first).
+    """
+    try:
+        session_manager = SessionManager()
+        sessions = session_manager.list_sessions(limit=limit)
+        return {
+            "sessions": sessions,
+            "total": len(sessions)
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list sessions: {str(e)}"
+        )
+
+
+@app.get("/api/sessions/{session_id}")
+async def get_session(session_id: str):
+    """
+    Get detailed information about a specific session.
+    """
+    try:
+        session_manager = SessionManager()
+        session = session_manager.get_session(session_id)
+
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Session '{session_id}' not found"
+            )
+
+        return session
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get session: {str(e)}"
+        )
+
+
+@app.get("/api/sessions/{session_id}/output")
+async def get_session_output(session_id: str):
+    """
+    Get the final output from a specific session.
+    """
+    try:
+        session_manager = SessionManager()
+        output = session_manager.get_session_output(session_id)
+
+        if not output:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Output not found for session '{session_id}'"
+            )
+
+        return output
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get session output: {str(e)}"
+        )
+
+
+@app.get("/api/sessions/{session_id}/agents/{agent_name}")
+async def get_session_agent_output(session_id: str, agent_name: str):
+    """
+    Get a specific agent's output from a session.
+
+    Agent names: classification, patternRecognition, labelAssignment,
+                 novelty, resolutionGeneration
+    """
+    try:
+        session_manager = SessionManager()
+        output = session_manager.get_agent_output(session_id, agent_name)
+
+        if not output:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Agent output '{agent_name}' not found for session '{session_id}'"
+            )
+
+        return output
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get agent output: {str(e)}"
+        )
+
+
+@app.get("/api/sessions/{session_id}/csv")
+async def download_session_csv(session_id: str):
+    """
+    Download the CSV file from a specific session.
+    """
+    from pathlib import Path
+
+    try:
+        session_manager = SessionManager()
+        session_dir = session_manager.get_session_output_dir(session_id)
+        csv_path = session_dir / "ticket_results.csv"
+
+        if not csv_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"CSV file not found for session '{session_id}'"
+            )
+
+        return FileResponse(
+            path=csv_path,
+            filename=f"ticket_results_{session_id}.csv",
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename=ticket_results_{session_id}.csv"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to download CSV: {str(e)}"
+        )
+
+
 @app.get("/")
 async def root():
     """Root endpoint with API info."""
@@ -773,6 +962,14 @@ async def root():
             "get_output": "/api/output",
             "download_csv": "/api/download-csv",
             "health": "/api/health",
+        },
+        "session_endpoints": {
+            # Session management endpoints
+            "list_sessions": "/api/sessions",
+            "get_session": "/api/sessions/{session_id}",
+            "get_session_output": "/api/sessions/{session_id}/output",
+            "get_agent_output": "/api/sessions/{session_id}/agents/{agent_name}",
+            "download_session_csv": "/api/sessions/{session_id}/csv",
         },
         "v2_endpoints": {
             # Component endpoints (individual component access)

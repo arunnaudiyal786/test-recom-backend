@@ -68,7 +68,16 @@ def export_ticket_results_to_csv(
     # Default output path
     if output_path is None:
         from config import Config
-        output_path = Config.PROJECT_ROOT / "output" / "ticket_results.csv"
+        # Check if session_id is available in state
+        session_id = state.get('session_id')
+        if session_id:
+            # Use session directory
+            from src.utils.session_manager import SessionManager
+            session_manager = SessionManager()
+            output_path = session_manager.get_session_output_dir(session_id) / "ticket_results.csv"
+        else:
+            # Fallback to legacy flat path
+            output_path = Config.PROJECT_ROOT / "output" / "ticket_results.csv"
 
     # Ensure output directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
