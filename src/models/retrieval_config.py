@@ -27,7 +27,7 @@ class RetrievalConfig(BaseModel):
     Where metadata_score = (priority_score * 0.6) + (time_score * 0.4)
     """
     top_k: int = Field(
-        default=20,
+        default=10,
         ge=5,
         le=50,
         description="Number of similar tickets to retrieve"
@@ -62,7 +62,7 @@ class RetrievalConfig(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "top_k": 20,
+                "top_k": 10,
                 "vector_weight": 0.7,
                 "metadata_weight": 0.3,
                 "priority_weights": {

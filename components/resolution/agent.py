@@ -1,16 +1,13 @@
 """
 Resolution Agent - LangGraph node for resolution generation.
 
-This agent generates comprehensive resolution plans using Chain-of-Thought
-reasoning based on ticket context and similar historical resolutions.
+This agent extracts resolution steps from similar historical tickets and
+generates a comprehensive resolution plan with summary and considerations.
 """
 
 from typing import Dict, Any
 
-from components.resolution.tools import (
-    analyze_similar_resolutions,
-    generate_resolution_plan
-)
+from components.resolution.tools import generate_resolution_plan
 
 
 async def resolution_node(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -49,22 +46,16 @@ async def resolution_node(state: Dict[str, Any]) -> Dict[str, Any]:
         avg_similarity = search_metadata.get("avg_similarity", 0.0)
 
         print(f"\n📝 Resolution Agent - Generating plan: {ticket_id}")
+        print(f"   📊 Extracting resolution steps from {min(5, len(similar_tickets))} similar tickets")
 
-        # Analyze similar resolutions
-        historical_context = analyze_similar_resolutions.invoke({
-            "similar_tickets": similar_tickets
-        })
-
-        print(f"   📊 Analyzed {min(5, len(similar_tickets))} similar resolutions")
-
-        # Generate resolution plan
+        # Generate resolution plan (now extracts steps directly from similar tickets)
         result = await generate_resolution_plan.ainvoke({
             "title": title,
             "description": description,
             "domain": domain,
             "priority": priority,
             "labels": all_labels,
-            "historical_context": historical_context,
+            "similar_tickets": similar_tickets,
             "avg_similarity": avg_similarity
         })
 
@@ -102,8 +93,7 @@ async def resolution_node(state: Dict[str, Any]) -> Dict[str, Any]:
             print(f"   ⚠️  Novelty warning added (score: {novelty_score:.2f})")
 
         print(f"   ✅ Generated resolution plan with confidence {confidence:.2%}")
-        print(f"   📋 {len(resolution_plan.get('diagnostic_steps', []))} diagnostic steps")
-        print(f"   📋 {len(resolution_plan.get('resolution_steps', []))} resolution steps")
+        print(f"   📋 {len(resolution_plan.get('resolution_steps', []))} resolution steps (extracted from similar tickets)")
 
         return {
             "resolution_plan": resolution_plan,

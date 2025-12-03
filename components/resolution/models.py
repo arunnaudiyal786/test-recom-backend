@@ -18,7 +18,7 @@ class DiagnosticStep(BaseModel):
 
 
 class ResolutionStep(BaseModel):
-    """A single resolution step."""
+    """A single resolution step extracted from similar historical tickets."""
     step_number: int
     description: str
     commands: List[str] = Field(default_factory=list)
@@ -26,6 +26,8 @@ class ResolutionStep(BaseModel):
     estimated_time_minutes: int = 10
     risk_level: str = "low"
     rollback_procedure: Optional[str] = None
+    source_ticket: Optional[str] = Field(default=None, description="Source ticket ID this step was extracted from")
+    source_similarity: Optional[float] = Field(default=None, description="Similarity percentage of the source ticket")
 
 
 class ResolutionPlan(BaseModel):
