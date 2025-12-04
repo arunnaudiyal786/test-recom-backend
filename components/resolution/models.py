@@ -21,6 +21,7 @@ class ResolutionStep(BaseModel):
     """A single resolution step extracted from similar historical tickets."""
     step_number: int
     description: str
+    expected_result: str = Field(default="", description="Expected outcome when test step passes")
     commands: List[str] = Field(default_factory=list)
     validation: str = "Verify step completed"
     estimated_time_minutes: int = 10

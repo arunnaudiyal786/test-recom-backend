@@ -1,3 +1,11 @@
 {
-  "description": "Verify AWD setup carries forward when Plan Migration transaction is performed through online portal. This involves batch processing of enrollment records. CONT1_MBR_EFF_DATE:01152025 TO 03152025. CONT2_MBR_EFF_DATE:03152025. AWD Effective date:02152025"
+  "ticket_id": "JIRA-TEST-001",
+  "title": "AWD Setup Verification for Plan Migration Transaction",
+  "description": "Verify AWD setup carries forward when Plan Migration transaction is performed through online portal. This involves batch processing of enrollment records. CONT1_MBR_EFF_DATE:01152025 TO 03152025. CONT2_MBR_EFF_DATE:03152025. AWD Effective date:02152025",
+  "priority": "Medium",
+  "metadata": {
+    "reported_by": "ops-team",
+    "environment": "testing",
+    "affected_module": "Plan Migration"
+  }
 }

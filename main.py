@@ -192,9 +192,59 @@ async def process_ticket(input_file: Path, output_file: Path = None):
     print(f"\n🚀 Starting LangGraph workflow...")
     workflow = get_workflow()
 
-    # Execute workflow
+    # Agent name mapping (same as api_server.py)
+    def _agent_key(agent_name: str) -> str:
+        """Convert agent name to file-friendly key."""
+        mapping = {
+            "Domain Classification Agent": "classification",
+            "Pattern Recognition Agent": "pattern_recognition",
+            "Label Assignment Agent": "label_assignment",
+            "Novelty Detection Agent": "novelty_detection",
+            "Resolution Generation Agent": "resolution_generation",
+            "classification": "classification",
+            "retrieval": "pattern_recognition",
+            "labeling": "label_assignment",
+            "novelty": "novelty_detection",
+            "resolution": "resolution_generation",
+        }
+        return mapping.get(agent_name, agent_name.lower().replace(" ", "_"))
+
+    # Execute workflow with streaming to capture individual agent outputs
+    accumulated_state = dict(initial_state)
+
     try:
-        final_state = await workflow.ainvoke(initial_state)
+        print("\n" + "-" * 60)
+        async for event in workflow.astream(initial_state):
+            # LangGraph astream yields dict with node names as keys
+            for node_name, node_state in event.items():
+                # Merge partial state into accumulated state
+                for key, value in node_state.items():
+                    if key == "messages" and isinstance(value, list):
+                        existing = accumulated_state.get("messages", [])
+                        accumulated_state["messages"] = existing + value
+                    else:
+                        accumulated_state[key] = value
+
+                current_agent = node_state.get("current_agent", "unknown")
+                status = node_state.get("status", "processing")
+
+                # Save individual agent output when complete
+                if status == "success":
+                    agent_key = _agent_key(current_agent)
+                    print(f"   ✅ {current_agent} completed")
+
+                    try:
+                        session_manager.save_agent_output(
+                            session_id=session_id,
+                            agent_name=agent_key,
+                            data=node_state
+                        )
+                    except Exception as e:
+                        print(f"   ⚠️  Could not save {agent_key} output: {e}")
+
+        print("-" * 60)
+        final_state = accumulated_state
+
     except Exception as e:
         print(f"\n❌ Workflow execution failed: {str(e)}")
         sys.exit(1)

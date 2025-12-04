@@ -183,6 +183,7 @@ Also provide:
     {{
       "step_number": 1,
       "description": "Clear, actionable test step synthesized from historical tickets",
+      "expected_result": "The specific expected outcome when this test step passes successfully",
       "validation": "How to verify this step was successful",
       "source_tickets": ["TICKET-123", "TICKET-456"],
       "estimated_time_minutes": 15
@@ -195,7 +196,9 @@ Also provide:
   "confidence": 0.85
 }}
 
-IMPORTANT: The test_plan array must have AT MOST 5 steps. Synthesize and consolidate related steps.
+IMPORTANT:
+- The test_plan array must have AT MOST 5 steps. Synthesize and consolidate related steps.
+- Each test step MUST include an expected_result that describes what success looks like.
 
 Respond ONLY with valid JSON."""
 
@@ -221,6 +224,7 @@ Respond ONLY with valid JSON."""
         fallback_steps = extracted_steps[:5] if extracted_steps else [{
             "step_number": 1,
             "description": "Escalate to senior engineer for manual test plan creation",
+            "expected_result": "Test plan created by senior engineer",
             "commands": [],
             "validation": "N/A",
             "estimated_time_minutes": 0,
@@ -272,6 +276,7 @@ def _build_resolution_plan(
         resolution_steps.append({
             "step_number": step.get("step_number", i),
             "description": step.get("description", ""),
+            "expected_result": step.get("expected_result", ""),
             "commands": [],  # Test plan steps don't have commands
             "validation": step.get("validation", "Verify step completed"),
             "estimated_time_minutes": step.get("estimated_time_minutes", 15),
