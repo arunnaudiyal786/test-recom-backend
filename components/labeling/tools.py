@@ -16,7 +16,11 @@ from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
 
-from config import Config
+# Fix Pydantic V2 forward reference issue with ChatOpenAI
+# This resolves the "BaseCache not fully defined" error
+ChatOpenAI.model_rebuild()
+
+from config.config import Config
 from src.prompts.label_assignment_prompts import (
     get_category_classification_prompt,
     get_binary_classification_prompt

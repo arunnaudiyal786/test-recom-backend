@@ -1,9 +1,64 @@
 # Schema Configuration for Test Recommendation System
 # This file defines how CSV data is mapped to the system's internal model
+#
+# IMPORTANT: This is the SINGLE SOURCE OF TRUTH for CSV column mappings.
+# To use a new CSV file with different column names, update the column_mappings
+# section below - no Python code changes required.
 
-# Data source type: determines which parsing logic to use
-# Supported types: 'historical_tickets' | 'test_plan'
-data_source_type: test_plan
+# =============================================================================
+# FIELD PROCESSING CONFIGURATION
+# Defines how special fields are derived/processed
+# =============================================================================
+
+field_processing:
+  # How to extract domain from tickets
+  # Options: 'from_column' | 'from_ticket_key'
+  domain_extraction_mode: from_column
+
+  # If domain_extraction_mode is 'from_ticket_key', define the key pattern
+  # The system will extract the domain code from ticket_id using this regex
+  # Example: JIRA-MM-001 -> extracts 'MM' using group 1
+  ticket_key_domain_pattern: "^[A-Z]+-([A-Z]+)-\\d+"
+  ticket_key_domain_map:
+    MM: MM
+    CI: CIW
+    SP: Specialty
+
+  # Date format for parsing created_date and closed_date columns
+  # Uses Python strptime format codes
+  date_format: "%Y-%m-%d %H:%M:%S"
+
+  # How to split resolution steps (regex pattern)
+  # Default splits by numbered steps "1. " or newlines
+  resolution_split_pattern: "\\d+\\.\\s*|\\n"
+
+  # How to split labels (simple delimiter)
+  labels_delimiter: ","
+
+# =============================================================================
+# VECTORIZATION CONFIGURATION
+# Define which columns should be used to generate embeddings
+# Only these columns will be concatenated and sent to the embedding model
+# =============================================================================
+
+vectorization:
+  # Columns to include in the embedding text (in order of concatenation)
+  # Use INTERNAL field names (from column_mappings keys), not CSV column names
+  columns:
+    - description        # Core content - always include
+    - test_steps         # Test step details
+    - expected_result    # Expected outcomes
+    - precondition       # Setup requirements
+    - category_labellings    # Category labels for context
+
+  # Separator between column values when concatenating
+  separator: ". "
+
+  # Whether to clean/normalize text before embedding
+  clean_text: true
+
+  # Maximum tokens per embedding (text-embedding-3-large supports 8191)
+  max_tokens: 8000
 
 # =============================================================================
 # COLUMN MAPPINGS
@@ -11,27 +66,39 @@ data_source_type: test_plan
 # =============================================================================
 
 column_mappings:
-  # Required fields - these must exist in your CSV
+  # ==========================================================================
+  # CORE FIELDS (Required - must exist in your CSV)
+  # ==========================================================================
   ticket_id: Issue_Key          # Unique identifier for each record
   title: Summary                # Short title/summary
   description: Description      # Detailed description
 
-  # Optional fields - set to null if not available in your CSV
-  priority: null                # Will be derived from story_points if null
-  resolution_steps: Expected_Result  # Steps for resolution (can be null)
+  # ==========================================================================
+  # METADATA FIELDS (Optional - set to null if not in your CSV)
+  # ==========================================================================
+  priority: null                # Priority level (derived from story_points if null)
+  resolution_steps: Expected_Result  # Resolution steps (can be null)
   created_date: null            # Created date column (can be null)
   closed_date: null             # Closed date column (can be null)
   issue_type: Type              # Type of issue (can be null)
   assignee: Labels6             # Person assigned (can be null)
-  team: Labels3                 # Team name (can be null)
+  label: Category_Labellings                 # Team name (can be null)
   reporter: null                # Reporter email (can be null)
 
-  # Test plan specific fields (optional)
+  # ==========================================================================
+  # TEST PLAN SPECIFIC FIELDS (Optional)
+  # ==========================================================================
   precondition: Precondition
   test_steps: Test_Step_Description
   expected_result: Expected_Result
   story_points: Story_Points
   status: Status
+
+  # ==========================================================================
+  # LABEL FIELDS (for categorization)
+  # These columns contain labels/tags for the ticket
+  # ==========================================================================
+  category_labels: category_labels  # Main category labels column
 
 # =============================================================================
 # LABEL CONFIGURATION
@@ -41,18 +108,11 @@ column_mappings:
 labels:
   # Columns that contain label values (will be combined into a single list)
   columns:
-    - Labels2    # Domain code (BL-CORE, EN-ENROLL, etc.)
-    - Labels3    # Team name (BillingTeam, etc.)
-    - Labels4    # DoR status, etc.
-    - Labels5    # Component name (CoreBilling, etc.)
-    - Labels6    # QA Lead
-    - Labels7    # Architect
-    - Labels8    # Environment (PROD, STAGE)
-    - Labels9    # Refinement status
+    - category_labels   # Refinement status
 
   # Columns to EXCLUDE from labels (even if they start with "Label")
   exclude_columns:
-    - Labels     # This contains story IDs, not labels
+   # - Labels #    # This contains story IDs, not labels
 
 # =============================================================================
 # DOMAIN CONFIGURATION
@@ -61,7 +121,7 @@ labels:
 
 domains:
   # Domain extraction: which column determines the domain?
-  extraction_column: Labels2
+  #extraction_column: Labels2
 
   # Mapping from column values to domain names
   # Format: csv_value: domain_name
@@ -279,68 +339,11 @@ priority:
     - Critical
 
 # =============================================================================
-# UI CONFIGURATION
-# Frontend display settings
+# NOTE: UI CONFIGURATION HAS BEEN MOVED TO FRONTEND
 # =============================================================================
-
-ui:
-  # Color schemes for domains (used by frontend)
-  color_schemes:
-    blue:
-      bg: "bg-blue-50 dark:bg-blue-950"
-      text: "text-blue-700 dark:text-blue-300"
-      border: "border-blue-200 dark:border-blue-800"
-      icon: "text-blue-600 dark:text-blue-400"
-    green:
-      bg: "bg-green-50 dark:bg-green-950"
-      text: "text-green-700 dark:text-green-300"
-      border: "border-green-200 dark:border-green-800"
-      icon: "text-green-600 dark:text-green-400"
-    purple:
-      bg: "bg-purple-50 dark:bg-purple-950"
-      text: "text-purple-700 dark:text-purple-300"
-      border: "border-purple-200 dark:border-purple-800"
-      icon: "text-purple-600 dark:text-purple-400"
-    amber:
-      bg: "bg-amber-50 dark:bg-amber-950"
-      text: "text-amber-700 dark:text-amber-300"
-      border: "border-amber-200 dark:border-amber-800"
-      icon: "text-amber-600 dark:text-amber-400"
-    orange:
-      bg: "bg-orange-50 dark:bg-orange-950"
-      text: "text-orange-700 dark:text-orange-300"
-      border: "border-orange-200 dark:border-orange-800"
-      icon: "text-orange-600 dark:text-orange-400"
-    cyan:
-      bg: "bg-cyan-50 dark:bg-cyan-950"
-      text: "text-cyan-700 dark:text-cyan-300"
-      border: "border-cyan-200 dark:border-cyan-800"
-      icon: "text-cyan-600 dark:text-cyan-400"
-    indigo:
-      bg: "bg-indigo-50 dark:bg-indigo-950"
-      text: "text-indigo-700 dark:text-indigo-300"
-      border: "border-indigo-200 dark:border-indigo-800"
-      icon: "text-indigo-600 dark:text-indigo-400"
-    pink:
-      bg: "bg-pink-50 dark:bg-pink-950"
-      text: "text-pink-700 dark:text-pink-300"
-      border: "border-pink-200 dark:border-pink-800"
-      icon: "text-pink-600 dark:text-pink-400"
-    red:
-      bg: "bg-red-50 dark:bg-red-950"
-      text: "text-red-700 dark:text-red-300"
-      border: "border-red-200 dark:border-red-800"
-      icon: "text-red-600 dark:text-red-400"
-    slate:
-      bg: "bg-slate-100 dark:bg-slate-800"
-      text: "text-slate-700 dark:text-slate-300"
-      border: "border-slate-200 dark:border-slate-700"
-      icon: "text-slate-600 dark:text-slate-400"
-
-  # Example ticket for the UI
-  sample_ticket_placeholder: |
-    Enter test case description here...
-
-    Example:
-    Verify AWD payment processing when member enrolls in family plan.
-    Setup includes primary member and 2 dependents with combined premium.
+# UI-related configuration (color schemes, sample placeholders) is now in:
+# test-recom-frontend/config/schema-config.ts
+#
+# This follows the separation of concerns principle:
+# - Backend: Data processing, business logic, domain classification prompts
+# - Frontend: UI styling, colors, display configuration

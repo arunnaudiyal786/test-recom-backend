@@ -19,6 +19,7 @@ from src.orchestrator.workflow import get_workflow, SKIP_DOMAIN_CLASSIFICATION
 from src.orchestrator.state import TicketWorkflowState as TicketState
 from src.utils.csv_exporter import export_ticket_results_to_csv
 from src.utils.session_manager import SessionManager
+from src.utils.mermaid_graph import save_session_workflow_graph
 from src.models.retrieval_config import (
     RetrievalConfig,
     RetrievalPreviewRequest,
@@ -293,11 +294,16 @@ async def stream_agent_updates(ticket: TicketInput) -> AsyncGenerator[str, None]
                 )
                 print(f"📊 Exported results to CSV: {csv_path}")
 
+                # Save workflow graph (Mermaid + PNG) in session directory
+                mermaid_path, png_path = save_session_workflow_graph(session_dir)
+
                 # Update 'latest' symlink to point to this session
                 session_manager.update_latest_symlink(session_id)
 
         except Exception as e:
             print(f"Error saving output file: {e}")
+            mermaid_path = None
+            png_path = None
 
         completion = {
             "status": "workflow_complete",
@@ -306,7 +312,9 @@ async def stream_agent_updates(ticket: TicketInput) -> AsyncGenerator[str, None]
             "session_path": str(session_dir) if session_dir else None,
             "output_available": True,
             "csv_exported": csv_path is not None,
-            "csv_path": str(csv_path) if csv_path else None
+            "csv_path": str(csv_path) if csv_path else None,
+            "mermaid_graph_path": str(mermaid_path) if mermaid_path else None,
+            "png_graph_path": str(png_path) if png_path else None
         }
         yield f"data: {json.dumps(completion)}\n\n"
 
@@ -389,7 +397,10 @@ def _extract_agent_data(agent_name: str, state: dict) -> dict:
             ],
         }
     elif agent_key in ("label assignment agent", "labeling"):
-        # Historical labels (from similar tickets)
+        # Category labels (from predefined taxonomy - the new three-tier system)
+        category_labels = state.get("category_labels", [])
+
+        # Historical labels (from similar tickets - legacy, kept for backward compat)
         historical_labels = state.get("historical_labels", [])
         historical_confidence = state.get("historical_label_confidence", {})
         historical_distribution = state.get("historical_label_distribution", {})
@@ -437,6 +448,7 @@ def _extract_agent_data(agent_name: str, state: dict) -> dict:
 
         return {
             # Three-tier labels
+            "category_labels": category_labels,  # From predefined taxonomy
             "historical_labels": historical_labels,
             "historical_label_confidence": historical_confidence,
             "historical_label_distribution": historical_distribution,

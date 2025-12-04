@@ -67,50 +67,55 @@ async def process_ticket(input_file: Path, output_file: Path):
 
 ---
 
-### **2. The LangGraph Workflow: `src/graph/workflow.py`**
+### **2. The LangGraph Workflow: `src/orchestrator/workflow.py`**
 
 LangGraph is a framework for building **sequential workflows** where each step depends on the previous one.
 
 ```python
-# src/graph/workflow.py:67-135
-def build_ticket_workflow() -> StateGraph:
-    """Build the 4-agent pipeline"""
+# src/orchestrator/workflow.py
+def build_workflow() -> StateGraph:
+    """Build the multi-agent pipeline"""
 
-    # Create a workflow graph with TicketState as the schema
-    workflow = StateGraph(TicketState)
+    # Create a workflow graph with TicketWorkflowState as the schema
+    workflow = StateGraph(TicketWorkflowState)
 
-    # Add 4 agent nodes (think of these as processing stations)
-    workflow.add_node("Domain Classification Agent", classification_agent)
-    workflow.add_node("Pattern Recognition Agent", pattern_recognition_agent)
-    workflow.add_node("Label Assignment Agent", label_assignment_agent)
-    workflow.add_node("Resolution Generation Agent", resolution_generation_agent)
+    # Add agent nodes (think of these as processing stations)
+    # Note: Classification is optional (controlled by SKIP_DOMAIN_CLASSIFICATION)
+    if not SKIP_DOMAIN_CLASSIFICATION:
+        workflow.add_node("Domain Classification Agent", classification_node)
+    workflow.add_node("Pattern Recognition Agent", retrieval_node)
+    workflow.add_node("Label Assignment Agent", labeling_node)
+    workflow.add_node("Novelty Detection Agent", novelty_node)
+    workflow.add_node("Resolution Generation Agent", resolution_node)
     workflow.add_node("Error Handler", error_handler_node)
 
-    # Set the starting point
-    workflow.set_entry_point("Domain Classification Agent")
+    # Set the starting point (skips classification by default)
+    if SKIP_DOMAIN_CLASSIFICATION:
+        workflow.set_entry_point("Pattern Recognition Agent")
+    else:
+        workflow.set_entry_point("Domain Classification Agent")
 
-    # Define the flow: Agent 1 → Agent 2 → Agent 3 → Agent 4 → END
-    # Each conditional edge checks if the previous agent succeeded or failed
+    # Define the flow with conditional edges
+    # Each checks if the previous agent succeeded or failed
     workflow.add_conditional_edges(
-        "Domain Classification Agent",
-        route_after_classification,  # Routing function checks status
-        {
-            "pattern_recognition": "Pattern Recognition Agent",  # Success path
-            "error_handler": "Error Handler"  # Error path
-        }
+        "Pattern Recognition Agent",
+        route_after_retrieval,
+        {"labeling": "Label Assignment Agent", "error_handler": "Error Handler"}
     )
 
-    # ... similar edges for other agents ...
+    # ... similar edges for Label → Novelty → Resolution ...
 
     return workflow.compile()
 ```
 
-**Analogy**: Think of this as an assembly line:
-- **Station 1**: Classification (sorts tickets by type)
-- **Station 2**: Pattern Recognition (finds similar tickets)
-- **Station 3**: Label Assignment (adds tags)
+**Analogy**: Think of this as an assembly line (default configuration):
+- **Station 1**: Pattern Recognition (finds similar tickets via FAISS)
+- **Station 2**: Label Assignment (adds category, business, and technical labels)
+- **Station 3**: Novelty Detection (checks if ticket is truly novel)
 - **Station 4**: Resolution Generation (creates fix plan)
 - If any station fails, the item goes to **Error Handler** (manual review)
+
+**Note**: Domain Classification Agent can be enabled as Station 0 by setting `SKIP_DOMAIN_CLASSIFICATION = False`.
 
 ---
 
@@ -513,7 +518,7 @@ async def __call__(self, state: TicketState) -> AgentOutput:
 ## **Frontend Architecture**
 
 ### **Tech Stack**
-- **Framework**: Next.js 14 (React with App Router)
+- **Framework**: Next.js 15 (React 19 with App Router)
 - **UI Library**: shadcn/ui (Tailwind CSS components)
 - **Styling**: Tailwind CSS
 - **Communication**: Server-Sent Events (SSE) for real-time streaming
@@ -751,17 +756,29 @@ Let me trace a complete ticket from submission to resolution:
         SSE Event to Frontend ──→ data: {"agent": "patternRecognition", "status": "complete", ...}
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ 6. AGENT 3: Label Assignment Agent                          │
-│    - Extracts candidate labels from similar tickets         │
-│    - Runs binary classifier for each label                  │
-│    - Filters by 0.7 confidence threshold                    │
-│    - Result: ["Configuration Fix", "#MM_ALDER"]             │
+│ 6. AGENT 2: Label Assignment Agent                          │
+│    - Classifies into categories from predefined taxonomy    │
+│    - Generates business-oriented labels (AI)                │
+│    - Generates technical labels (AI)                        │
+│    - All 3 run in PARALLEL via asyncio.gather               │
+│    - Result: [CAT], [BIZ], [TECH] prefixed labels           │
 └─────────────────────────────────────────────────────────────┘
                             ↓
         SSE Event to Frontend ──→ data: {"agent": "labelAssignment", "status": "complete", ...}
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ 7. AGENT 4: Resolution Generation Agent                     │
+│ 7. AGENT 3: Novelty Detection Agent                         │
+│    - Analyzes if ticket is truly novel (no LLM calls)       │
+│    - Signal 1: Max confidence check (40% weight)            │
+│    - Signal 2: Entropy analysis (30% weight)                │
+│    - Signal 3: Centroid distance (30% weight)               │
+│    - Result: novelty_detected, novelty_score, recommendation│
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+        SSE Event to Frontend ──→ data: {"agent": "noveltyDetection", "status": "complete", ...}
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 8. AGENT 4: Resolution Generation Agent                     │
 │    - Builds context from all previous agents                │
 │    - Calls GPT-4 with Chain-of-Thought prompt               │
 │    - Generates diagnostic + resolution steps                │
@@ -771,7 +788,7 @@ Let me trace a complete ticket from submission to resolution:
         SSE Event to Frontend ──→ data: {"agent": "resolutionGeneration", "status": "complete", ...}
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ 8. Workflow Complete                                        │
+│ 9. Workflow Complete                                        │
 │    - FastAPI saves final state to output/ticket_resolution.json │
 │    - Sends completion event to frontend                     │
 └─────────────────────────────────────────────────────────────┘
@@ -1066,73 +1083,99 @@ Agent 4 Output              Agent 3 Output                     │
 ## **File Structure Reference**
 
 ```
-EIP/
-├── frontend/                       # Next.js Frontend
-│   ├── app/
-│   │   ├── page.tsx               # Root redirect
-│   │   ├── layout.tsx             # App layout
-│   │   ├── pattern-recognition/
-│   │   │   └── page.tsx          # Main UI (agent dashboard)
-│   │   └── api/
-│   │       └── process-ticket/
-│   │           └── route.ts       # (Unused) Next.js API route
-│   ├── components/
-│   │   ├── agent-card.tsx         # Agent status card
-│   │   ├── ticket-submission.tsx  # Ticket form
-│   │   └── ui/                    # shadcn/ui components
-│   └── package.json
+test-recom-backend/                 # Python Backend
 │
-├── src/                           # Python Backend
-│   ├── agents/
-│   │   ├── classification_agent.py        # Agent 1
-│   │   ├── pattern_recognition_agent.py   # Agent 2
-│   │   ├── label_assignment_agent.py      # Agent 3
-│   │   └── resolution_generation_agent.py # Agent 4
-│   ├── graph/
-│   │   ├── workflow.py            # LangGraph pipeline
-│   │   └── state_manager.py       # Routing functions
-│   ├── models/
-│   │   ├── state_schema.py        # TicketState TypedDict
-│   │   ├── ticket_schema.py       # Pydantic models
-│   │   └── output_schema.py       # Output models
-│   ├── prompts/
-│   │   ├── classification_prompts.py      # Binary classifier prompts
-│   │   ├── label_assignment_prompts.py    # Label criteria
-│   │   └── resolution_generation_prompts.py # CoT prompts
-│   ├── vectorstore/
-│   │   ├── faiss_manager.py       # FAISS operations
-│   │   ├── embedding_generator.py # OpenAI embeddings
-│   │   └── data_ingestion.py      # CSV → FAISS pipeline
-│   └── utils/
-│       ├── config.py              # Environment config
-│       ├── openai_client.py       # OpenAI API wrapper
-│       └── helpers.py             # Utility functions
+├── api_server.py                   # FastAPI SSE server
+├── main.py                         # CLI entry point
+│
+├── components/                     # NEW ARCHITECTURE - LangChain agents
+│   ├── base/                       # Abstract base classes
+│   │   ├── component.py            # BaseComponent ABC
+│   │   ├── config.py               # ComponentConfig (Pydantic Settings)
+│   │   └── exceptions.py           # Custom exception classes
+│   ├── classification/             # Domain Classification Agent (optional)
+│   │   ├── agent.py                # LangGraph node wrapper
+│   │   ├── tools.py                # @tool decorated functions
+│   │   └── classification.md       # Component documentation
+│   ├── retrieval/                  # Pattern Recognition Agent
+│   │   ├── agent.py
+│   │   ├── tools.py
+│   │   └── retrieval.md
+│   ├── labeling/                   # Label Assignment Agent
+│   │   ├── agent.py
+│   │   ├── tools.py
+│   │   ├── service.py
+│   │   └── labeling.md
+│   ├── novelty/                    # Novelty Detection Agent
+│   │   ├── agent.py
+│   │   ├── tools.py
+│   │   └── novelty.md
+│   ├── resolution/                 # Resolution Generation Agent
+│   │   ├── agent.py
+│   │   ├── tools.py
+│   │   └── resolution.md
+│   └── embedding/                  # Utility service (not an agent)
+│       ├── service.py
+│       └── embedding.md
+│
+├── src/
+│   ├── agents/                     # OLD ARCHITECTURE - legacy (for reference)
+│   ├── orchestrator/               # LangGraph workflow definition
+│   │   ├── workflow.py             # StateGraph construction
+│   │   └── state.py                # TicketWorkflowState TypedDict
+│   ├── prompts/                    # LLM prompt templates
+│   ├── vectorstore/                # FAISS index management
+│   │   ├── faiss_manager.py        # Index CRUD operations
+│   │   └── data_ingestion.py       # CSV → embeddings → FAISS
+│   ├── models/                     # Pydantic models
+│   └── utils/                      # Config, helpers, OpenAI client
 │
 ├── data/
 │   ├── raw/
-│   │   └── historical_tickets.csv # Historical data (CSV format)
-│   └── faiss_index/
-│       ├── tickets.index          # FAISS index file
-│       └── metadata.json          # Ticket metadata
-│
-├── scripts/
-│   ├── setup_vectorstore.py       # Build FAISS index
-│   ├── generate_sample_csv_data.py # Generate CSV data
-│   └── visualize_graph.py         # Visualize workflow
+│   │   └── historical_tickets.csv  # Historical data (CSV format)
+│   ├── faiss/                      # FAISS index files
+│   │   ├── tickets.index           # Binary index file
+│   │   └── metadata.json           # Ticket metadata
+│   └── metadata/
+│       └── categories.json         # Category taxonomy
 │
 ├── input/
-│   └── current_ticket.json        # Sample input ticket
+│   └── current_ticket.json         # Sample input ticket
 │
 ├── output/
-│   ├── ticket_resolution.json     # Final output
-│   └── workflow_graph.png         # Workflow diagram
+│   └── ticket_resolution.json      # Processing results
 │
-├── main.py                        # CLI entry point
-├── api_server.py                  # FastAPI SSE server
-├── requirements.txt               # Python dependencies
-├── .env                           # Environment variables
-├── CLAUDE.md                      # Project instructions
-└── CODEBASE.md                    # This file
+├── scripts/
+│   ├── setup_vectorstore.py        # Build FAISS index
+│   └── generate_sample_csv_data.py # Generate sample data
+│
+├── docs/                           # Documentation
+│   ├── CODEBASE.md                 # This file
+│   ├── flow.md                     # Architecture flow guide
+│   ├── STARTUP.md                  # Setup guide
+│   └── horizon_integration.md      # Horizon LLM migration guide
+│
+├── config/
+│   └── schema_config.yaml          # Domain/label/color configuration
+│
+├── requirements.txt                # Python dependencies
+├── .env                            # Environment variables
+└── CLAUDE.md                       # Project instructions
+```
+
+**Frontend Structure** (in `test-recom-frontend/`):
+
+```
+test-recom-frontend/                # Next.js 15 Frontend
+├── app/
+│   ├── page.tsx                    # Root redirect
+│   ├── layout.tsx                  # App layout
+│   ├── pattern-recognition/        # Main ticket processing UI
+│   └── retrieval-engine/           # Search tuning interface
+├── components/                     # React components
+│   ├── ui/                         # shadcn/ui components
+│   └── ...
+└── package.json
 ```
 
 ---
@@ -1379,18 +1422,28 @@ asyncio.run(test())
 
 This **Intelligent Ticket Management System** demonstrates a production-ready implementation of:
 
-1. **Multi-Agent LLM Pipeline**: 4 specialized agents working sequentially
+1. **Multi-Agent LLM Pipeline**: 4 specialized agents working sequentially (5 with optional Classification)
 2. **Vector Similarity Search**: FAISS for sub-millisecond semantic search
-3. **Real-Time UI Updates**: SSE streaming from backend to frontend
-4. **Modern Tech Stack**: Python (LangGraph/FastAPI) + TypeScript (Next.js)
-5. **Scalable Architecture**: Async operations, efficient state management
+3. **Multi-Signal Novelty Detection**: Detects unknown ticket types without LLM calls
+4. **Three-Tier Labeling**: Category (taxonomy) + Business (AI) + Technical (AI) labels
+5. **Real-Time UI Updates**: SSE streaming from backend to frontend
+6. **Modern Tech Stack**: Python (LangGraph/FastAPI) + TypeScript (Next.js 15)
+7. **Scalable Architecture**: Async operations, efficient state management
 
-**Key Innovation**: Binary classifiers instead of multi-class for higher accuracy and parallelization.
+**Default Pipeline**:
+```
+Pattern Recognition → Label Assignment → Novelty Detection → Resolution Generation
+```
 
-**Use Cases**: Technical support automation, incident triage, knowledge base recommendations, automated troubleshooting.
+**Key Innovations**:
+- Three-tier labeling (predefined categories + AI-generated labels)
+- Multi-signal novelty detection (confidence, entropy, centroid distance)
+- Hybrid scoring (70% vector + 30% metadata relevance)
+
+**Use Cases**: Technical support automation, incident triage, knowledge base recommendations, automated troubleshooting, novel issue detection.
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: 2025-01-15
+**Document Version**: 2.0
+**Last Updated**: 2025-12-03
 **Authors**: Codebase Analysis Team

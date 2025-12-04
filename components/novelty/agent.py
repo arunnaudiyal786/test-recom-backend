@@ -13,7 +13,7 @@ It uses data from the labeling step:
 from typing import Dict, Any, List, Tuple
 
 from components.novelty.tools import detect_novelty
-from config import Config
+from config.config import Config
 
 
 async def novelty_node(state: Dict[str, Any]) -> Dict[str, Any]:

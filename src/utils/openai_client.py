@@ -5,7 +5,7 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from openai import AsyncOpenAI
 from openai import RateLimitError, APIError, APITimeoutError
-from config import Config
+from config.config import Config
 
 
 class OpenAIClient:

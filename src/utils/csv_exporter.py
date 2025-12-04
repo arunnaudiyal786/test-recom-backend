@@ -67,7 +67,7 @@ def export_ticket_results_to_csv(
     """
     # Default output path
     if output_path is None:
-        from config import Config
+        from config.config import Config
         # Check if session_id is available in state
         session_id = state.get('session_id')
         if session_id:
@@ -172,7 +172,7 @@ def export_batch_results_to_csv(
 
     # Default output path with timestamp
     if output_path is None:
-        from config import Config
+        from config.config import Config
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         output_path = Config.PROJECT_ROOT / "output" / f"ticket_results_batch_{timestamp}.csv"
 

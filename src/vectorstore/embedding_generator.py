@@ -5,7 +5,7 @@ import asyncio
 from typing import List
 from src.utils.openai_client import get_openai_client
 from src.utils.helpers import combine_ticket_text, clean_text
-from config import Config
+from config.config import Config
 
 
 class EmbeddingGenerator:

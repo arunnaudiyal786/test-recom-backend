@@ -15,7 +15,7 @@ from components.labeling.tools import (
     generate_business_labels,
     generate_technical_labels
 )
-from config import Config
+from config.config import Config
 
 
 async def labeling_node(state: Dict[str, Any]) -> Dict[str, Any]:

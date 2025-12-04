@@ -10,7 +10,7 @@ from typing import Dict, List, Any, Optional
 import time
 
 from src.models.data_prep_state import DataPrepState, DataPrepAgentOutput
-from config import Config
+from config.config import Config
 
 
 class DataValidatorAgent:

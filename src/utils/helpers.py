@@ -50,6 +50,57 @@ def combine_ticket_text(title: str, description: str) -> str:
     return f"{cleaned_title}. {cleaned_desc}"
 
 
+def combine_text_for_embedding(
+    ticket: Dict[str, Any],
+    columns: List[str],
+    separator: str = ". ",
+    should_clean: bool = True,
+    max_tokens: int = 8000
+) -> str:
+    """
+    Combine multiple ticket fields for embedding based on configuration.
+
+    This function dynamically combines the specified columns from a ticket
+    dictionary to create the text that will be sent to the embedding model.
+
+    Args:
+        ticket: Dict containing ticket fields
+        columns: List of field names to include (in order)
+        separator: String to use between field values
+        should_clean: Whether to clean/normalize the text
+        max_tokens: Maximum tokens for the combined text
+
+    Returns:
+        Combined text optimized for embedding
+
+    Example:
+        >>> ticket = {'title': 'Bug', 'description': 'App crashes', 'test_steps': 'Click button'}
+        >>> combine_text_for_embedding(ticket, ['title', 'description', 'test_steps'])
+        'bug. app crashes. click button'
+    """
+    parts = []
+
+    for column in columns:
+        value = ticket.get(column, '')
+        if value:
+            # Handle list values (like resolution_steps)
+            if isinstance(value, list):
+                value = ' '.join(str(v) for v in value if v)
+            else:
+                value = str(value)
+
+            if should_clean:
+                value = clean_text(value)
+
+            if value:  # Only add non-empty values
+                parts.append(value)
+
+    combined = separator.join(parts)
+
+    # Truncate if needed
+    return truncate_text(combined, max_tokens)
+
+
 def truncate_text(text: str, max_tokens: int = 8000) -> str:
     """
     Truncate text to approximate token limit.

@@ -45,8 +45,8 @@ async def resolution_node(state: Dict[str, Any]) -> Dict[str, Any]:
         search_metadata = state.get("search_metadata", {})
         avg_similarity = search_metadata.get("avg_similarity", 0.0)
 
-        print(f"\n📝 Resolution Agent - Generating plan: {ticket_id}")
-        print(f"   📊 Extracting resolution steps from {min(5, len(similar_tickets))} similar tickets")
+        print(f"\n📝 Resolution Agent - Generating Test Plan: {ticket_id}")
+        print(f"   📊 Synthesizing test plan from {min(5, len(similar_tickets))} similar tickets")
 
         # Generate resolution plan (now extracts steps directly from similar tickets)
         result = await generate_resolution_plan.ainvoke({
@@ -92,8 +92,8 @@ async def resolution_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
             print(f"   ⚠️  Novelty warning added (score: {novelty_score:.2f})")
 
-        print(f"   ✅ Generated resolution plan with confidence {confidence:.2%}")
-        print(f"   📋 {len(resolution_plan.get('resolution_steps', []))} resolution steps (extracted from similar tickets)")
+        print(f"   ✅ Generated test plan with confidence {confidence:.2%}")
+        print(f"   📋 {len(resolution_plan.get('resolution_steps', []))} test steps (synthesized from similar tickets)")
 
         return {
             "resolution_plan": resolution_plan,
@@ -103,7 +103,7 @@ async def resolution_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "current_agent": "resolution",
             "messages": [{
                 "role": "assistant",
-                "content": f"Generated resolution plan with {confidence:.2%} confidence" +
+                "content": f"Generated test plan with {confidence:.2%} confidence" +
                            (f" (NOVELTY DETECTED: {novelty_score:.2f})" if novelty_detected else "")
             }]
         }
@@ -111,20 +111,20 @@ async def resolution_node(state: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         print(f"   ❌ Resolution error: {str(e)}")
 
-        # Return fallback plan
+        # Return fallback test plan
         fallback_plan = {
-            "summary": "Automatic processing failed. Manual review required.",
+            "summary": "Automatic test plan generation failed. Manual review required.",
             "diagnostic_steps": [],
             "resolution_steps": [{
                 "step_number": 1,
-                "description": "Escalate to human agent for manual processing",
+                "description": "Escalate to test engineer for manual test plan creation",
                 "commands": [],
                 "validation": "N/A",
                 "estimated_time_minutes": 0,
                 "risk_level": "low",
                 "rollback_procedure": None
             }],
-            "additional_considerations": [f"Resolution generation failed: {str(e)}"],
+            "additional_considerations": [f"Test plan generation failed: {str(e)}"],
             "references": [],
             "total_estimated_time_hours": 0,
             "confidence": 0.0,
@@ -136,10 +136,10 @@ async def resolution_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "resolution_confidence": 0.0,
             "status": "error",
             "current_agent": "resolution",
-            "error_message": f"Resolution generation failed: {str(e)}",
+            "error_message": f"Test plan generation failed: {str(e)}",
             "messages": [{
                 "role": "assistant",
-                "content": f"Resolution generation failed: {str(e)}"
+                "content": f"Test plan generation failed: {str(e)}"
             }]
         }
 

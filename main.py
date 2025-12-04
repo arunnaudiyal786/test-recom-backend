@@ -11,12 +11,13 @@ from pathlib import Path
 from typing import Dict, Any
 
 # Use new LangGraph orchestrator
-from src.orchestrator.workflow import get_workflow, visualize_workflow
+from src.orchestrator.workflow import get_workflow
 from src.orchestrator.state import TicketWorkflowState
 from src.models.ticket_schema import IncomingTicket, FinalTicketOutput
-from config import Config
+from config.config import Config
 from src.utils.csv_exporter import export_ticket_results_to_csv
 from src.utils.session_manager import SessionManager
+from src.utils.mermaid_graph import save_session_workflow_graph
 
 
 def load_input_ticket(file_path: Path) -> Dict[str, Any]:
@@ -183,14 +184,9 @@ async def process_ticket(input_file: Path, output_file: Path = None):
     # Get session output directory
     session_dir = session_manager.get_session_output_dir(session_id)
 
-    # Generate workflow visualization in session directory
+    # Generate workflow visualization (Mermaid + PNG) in session directory
     print(f"\n📊 Generating workflow graph...")
-    graph_path = session_dir / "workflow_graph.png"
-    try:
-        visualize_workflow(str(graph_path))
-    except Exception as e:
-        print(f"   ⚠️  Could not generate graph visualization: {e}")
-        print(f"   (Install graphviz: brew install graphviz)")
+    mermaid_path, png_path = save_session_workflow_graph(session_dir)
 
     # Get workflow
     print(f"\n🚀 Starting LangGraph workflow...")
@@ -239,7 +235,10 @@ async def process_ticket(input_file: Path, output_file: Path = None):
     print(f"   Overall Confidence: {output['overall_confidence']:.2%}")
     print(f"   Processing Time: {processing_time:.2f} seconds")
     print(f"\n   📁 Session directory: {session_dir}")
-    print(f"   📊 Workflow graph: {graph_path}")
+    if mermaid_path:
+        print(f"   📊 Workflow graph (Mermaid): {mermaid_path}")
+    if png_path:
+        print(f"   🖼️  Workflow graph (PNG): {png_path}")
     print(f"   📄 Full results: {output_file}")
     print(f"   📋 CSV export: {csv_path}")
     print("=" * 80)

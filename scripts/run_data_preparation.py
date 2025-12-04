@@ -27,7 +27,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.graph.data_prep_workflow import get_data_prep_workflow
-from config import Config
+from config.config import Config
 
 
 def parse_arguments():

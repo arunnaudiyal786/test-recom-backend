@@ -24,7 +24,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from langchain_core.tools import tool
 
 from components.labeling.category_embeddings import CategoryEmbeddings
-from config import Config
+from config.config import Config
 
 
 def calculate_normalized_entropy(confidence_scores: List[float]) -> float:

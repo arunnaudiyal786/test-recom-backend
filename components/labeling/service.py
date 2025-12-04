@@ -25,7 +25,7 @@ from components.labeling.models import (
     LabelWithConfidence,
     CategoryLabel,
 )
-from config import Config
+from config.config import Config
 from src.prompts.label_assignment_prompts import get_category_classification_prompt
 
 

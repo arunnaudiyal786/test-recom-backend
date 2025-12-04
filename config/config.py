@@ -30,7 +30,7 @@ class Config:
     MAX_RESOLUTION_TOKENS = 8000
 
     # ========== VECTOR DATABASE PATHS ==========
-    PROJECT_ROOT = Path(__file__).parent  # config.py is at project root
+    PROJECT_ROOT = Path(__file__).parent.parent  # config.py is in config/ folder
     FAISS_INDEX_PATH = PROJECT_ROOT / "data/faiss_index/tickets.index"
     FAISS_METADATA_PATH = PROJECT_ROOT / "data/faiss_index/metadata.json"
 

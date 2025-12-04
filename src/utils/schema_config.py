@@ -46,13 +46,83 @@ class SchemaConfig:
         self._load_config()
 
     # =========================================================================
-    # Data Source Configuration
+    # Field Processing Configuration
     # =========================================================================
 
     @property
-    def data_source_type(self) -> str:
-        """Get the data source type (historical_tickets or test_plan)."""
-        return self._config.get('data_source_type', 'historical_tickets')
+    def field_processing_config(self) -> Dict[str, Any]:
+        """Get the field processing configuration."""
+        return self._config.get('field_processing', {})
+
+    @property
+    def domain_extraction_mode(self) -> str:
+        """
+        Get domain extraction mode: 'from_column' or 'from_ticket_key'.
+        """
+        return self.field_processing_config.get('domain_extraction_mode', 'from_column')
+
+    @property
+    def ticket_key_domain_pattern(self) -> str:
+        """Get regex pattern to extract domain from ticket key."""
+        return self.field_processing_config.get(
+            'ticket_key_domain_pattern',
+            r'^[A-Z]+-([A-Z]+)-\d+'
+        )
+
+    @property
+    def ticket_key_domain_map(self) -> Dict[str, str]:
+        """Get mapping from ticket key domain codes to domain names."""
+        return self.field_processing_config.get('ticket_key_domain_map', {})
+
+    @property
+    def date_format(self) -> str:
+        """Get date format string for parsing dates."""
+        return self.field_processing_config.get('date_format', '%Y-%m-%d %H:%M:%S')
+
+    @property
+    def resolution_split_pattern(self) -> str:
+        """Get regex pattern for splitting resolution steps."""
+        return self.field_processing_config.get('resolution_split_pattern', r'\d+\.\s*|\n')
+
+    @property
+    def labels_delimiter(self) -> str:
+        """Get delimiter for splitting label strings."""
+        return self.field_processing_config.get('labels_delimiter', ',')
+
+    # =========================================================================
+    # Vectorization Configuration
+    # =========================================================================
+
+    @property
+    def vectorization_config(self) -> Dict[str, Any]:
+        """Get the full vectorization configuration."""
+        return self._config.get('vectorization', {})
+
+    @property
+    def vectorization_columns(self) -> List[str]:
+        """
+        Get list of internal field names to use for embedding generation.
+
+        These are the field names after column mapping (e.g., 'title', 'description'),
+        not the raw CSV column names.
+        """
+        default_columns = ['title', 'description']
+        return self.vectorization_config.get('columns', default_columns)
+
+    @property
+    def vectorization_separator(self) -> str:
+        """Get the separator used between column values when concatenating."""
+        return self.vectorization_config.get('separator', '. ')
+
+    @property
+    def vectorization_clean_text(self) -> bool:
+        """Whether to clean/normalize text before embedding."""
+        return self.vectorization_config.get('clean_text', True)
+
+    @property
+    def vectorization_max_tokens(self) -> int:
+        """Maximum tokens per embedding."""
+        return self.vectorization_config.get('max_tokens', 8000)
 
     # =========================================================================
     # Column Mappings
@@ -208,64 +278,37 @@ class SchemaConfig:
             return 'Medium'
 
     # =========================================================================
-    # UI Configuration
-    # =========================================================================
-
-    @property
-    def ui_config(self) -> Dict[str, Any]:
-        """Get UI configuration."""
-        return self._config.get('ui', {})
-
-    @property
-    def color_schemes(self) -> Dict[str, Dict[str, str]]:
-        """Get color scheme definitions."""
-        return self.ui_config.get('color_schemes', {})
-
-    def get_domain_colors(self, domain: str) -> Dict[str, str]:
-        """
-        Get color classes for a domain.
-
-        Args:
-            domain: Domain name
-
-        Returns:
-            Dict with bg, text, border, icon color classes
-        """
-        display_info = self.get_domain_display_info(domain)
-        color_scheme = display_info.get('color_scheme', 'slate')
-        return self.color_schemes.get(color_scheme, self.color_schemes.get('slate', {}))
-
-    @property
-    def sample_ticket_placeholder(self) -> str:
-        """Get sample ticket placeholder text for UI."""
-        return self.ui_config.get('sample_ticket_placeholder', 'Enter ticket description...')
-
-    # =========================================================================
     # Export for API
     # =========================================================================
+    #
+    # NOTE: UI configuration (colors, sample placeholders) has been moved to
+    # the frontend: test-recom-frontend/config/schema-config.ts
+    # This endpoint now returns only domain metadata needed for API operations.
 
     def get_frontend_config(self) -> Dict[str, Any]:
         """
         Get configuration formatted for frontend consumption.
 
+        NOTE: UI styling (colors) is now managed in the frontend.
+        This returns only domain metadata and priorities.
+
         Returns:
-            Dict with domains, colors, and UI settings
+            Dict with domain names, descriptions, and priorities
         """
         domains_for_frontend = {}
         for domain in self.domain_names:
             display_info = self.get_domain_display_info(domain)
-            colors = self.get_domain_colors(domain)
             domains_for_frontend[domain] = {
                 'full_name': display_info['full_name'],
                 'description': display_info['description'],
-                'colors': colors,
             }
 
         return {
             'domains': domains_for_frontend,
             'domain_list': self.domain_names,
             'priorities': self.valid_priorities,
-            'sample_placeholder': self.sample_ticket_placeholder,
+            # UI config is now in frontend - see test-recom-frontend/config/schema-config.ts
+            '_note': 'UI styling config moved to frontend config/schema-config.ts',
         }
 
     def get_classification_config(self) -> Dict[str, Any]:

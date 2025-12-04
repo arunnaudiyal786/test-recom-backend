@@ -44,20 +44,25 @@ This document explains the complete data flow and architecture of the Intelligen
 │                    src/orchestrator/workflow.py                             │
 │                        LangGraph StateGraph                                 │
 │                                                                             │
-│   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────┐ │
-│   │ Pattern      │───▶│ Label        │───▶│ Resolution   │───▶│   END    │ │
-│   │ Recognition  │    │ Assignment   │    │ Generation   │    │          │ │
-│   │ Agent        │    │ Agent        │    │ Agent        │    │          │ │
-│   └──────────────┘    └──────────────┘    └──────────────┘    └──────────┘ │
-│         │                   │                   │                          │
-│         └───────────────────┴───────────────────┼──────────────────────────┘
-│                                                 │ On Error
-│                                                 ▼
-│                                         ┌──────────────┐
-│                                         │ Error Handler│
-│                                         │ (Manual      │
-│                                         │  Escalation) │
-│                                         └──────────────┘
+│   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌────────────┐  │
+│   │ Pattern      │──▶│ Label        │──▶│ Novelty      │──▶│ Resolution │  │
+│   │ Recognition  │   │ Assignment   │   │ Detection    │   │ Generation │  │
+│   │ Agent        │   │ Agent        │   │ Agent        │   │ Agent      │  │
+│   └──────────────┘   └──────────────┘   └──────────────┘   └────────────┘  │
+│         │                   │                  │                  │         │
+│         └───────────────────┴──────────────────┴──────────────────┼─────────┘
+│                                                                   │ On Error
+│                                                                   ▼
+│                                                          ┌──────────────┐
+│                                                          │ Error Handler│
+│                                                          │ (Manual      │
+│                                                          │  Escalation) │
+│                                                          └──────────────┘
+│                                                                   │
+│                                                                   ▼
+│                                                          ┌──────────────┐
+│                                                          │     END      │
+│                                                          └──────────────┘
 └─────────────────────────────────────────────────────────────────────────────┘
                                    │
                     ┌──────────────┼──────────────┐
@@ -69,6 +74,8 @@ This document explains the complete data flow and architecture of the Intelligen
 ```
 
 **Key Insight**: This is a **sequential pipeline**, NOT a conversational agent system. Each agent must complete before the next starts.
+
+**Note**: Domain Classification Agent can be enabled via `SKIP_DOMAIN_CLASSIFICATION = False` in `src/orchestrator/workflow.py`. When enabled, it runs before Pattern Recognition.
 
 ---
 
@@ -86,9 +93,10 @@ test-recom-backend/
 │   │   ├── config.py          # ComponentConfig (Pydantic Settings)
 │   │   └── exceptions.py      # Custom exception classes
 │   │
-│   ├── classification/        # Domain Classification Agent
+│   ├── classification/        # Domain Classification Agent (optional)
 │   ├── retrieval/             # Pattern Recognition Agent (FAISS search)
 │   ├── labeling/              # Label Assignment Agent
+│   ├── novelty/               # Novelty Detection Agent (multi-signal analysis)
 │   ├── resolution/            # Resolution Generation Agent
 │   └── embedding/             # Utility service (not an agent)
 │
@@ -198,22 +206,38 @@ def build_workflow() -> StateGraph:
     workflow = StateGraph(TicketWorkflowState)
 
     # 2. Add nodes (each node is an agent function)
+    # Note: Classification node is optional (controlled by SKIP_DOMAIN_CLASSIFICATION)
+    if not SKIP_DOMAIN_CLASSIFICATION:
+        workflow.add_node("Domain Classification Agent", classification_node)
     workflow.add_node("Pattern Recognition Agent", retrieval_node)
     workflow.add_node("Label Assignment Agent", labeling_node)
+    workflow.add_node("Novelty Detection Agent", novelty_node)
     workflow.add_node("Resolution Generation Agent", resolution_node)
     workflow.add_node("Error Handler", error_handler_node)
 
-    # 3. Set entry point
-    workflow.set_entry_point("Pattern Recognition Agent")
+    # 3. Set entry point (skips classification by default)
+    if SKIP_DOMAIN_CLASSIFICATION:
+        workflow.set_entry_point("Pattern Recognition Agent")
+    else:
+        workflow.set_entry_point("Domain Classification Agent")
 
     # 4. Add conditional edges (routing logic)
     workflow.add_conditional_edges(
         "Pattern Recognition Agent",
-        route_after_retrieval,           # Routing function
-        {
-            "labeling": "Label Assignment Agent",
-            "error_handler": "Error Handler"
-        }
+        route_after_retrieval,
+        {"labeling": "Label Assignment Agent", "error_handler": "Error Handler"}
+    )
+
+    workflow.add_conditional_edges(
+        "Label Assignment Agent",
+        route_after_labeling,
+        {"novelty": "Novelty Detection Agent", "error_handler": "Error Handler"}
+    )
+
+    workflow.add_conditional_edges(
+        "Novelty Detection Agent",
+        route_after_novelty,
+        {"resolution": "Resolution Generation Agent", "error_handler": "Error Handler"}
     )
 
     # 5. Compile and return
@@ -362,8 +386,22 @@ Initial State:
      │
      ▼ Label Assignment Agent
 {
-  "assigned_labels": ["DB", "Connection"],  # Added
-  "status": "success"                       # Confirmed
+  "category_labels": [...],                 # Added (from taxonomy)
+  "business_labels": [...],                 # Added (AI-generated)
+  "technical_labels": [...],                # Added (AI-generated)
+  "assigned_labels": ["[CAT]...", "[BIZ]...", "[TECH]..."],  # Combined
+  "ticket_embedding": [...],                # Added (for novelty detection)
+  "all_category_scores": [...],             # Added (for novelty detection)
+  "status": "success"
+}
+     │
+     ▼ Novelty Detection Agent
+{
+  "novelty_detected": false,     # Added
+  "novelty_score": 0.25,         # Added
+  "novelty_recommendation": "proceed",  # Added
+  "novelty_signals": {...},      # Added (signal details)
+  "status": "success"
 }
      │
      ▼ Resolution Generation Agent
@@ -420,15 +458,30 @@ POST /api/process-ticket
 │    └─▶ Calls extract_candidate_labels tool                                  │
 │        └─▶ Extracts unique labels from similar_tickets                      │
 │    └─▶ Runs 3 PARALLEL tasks via asyncio.gather:                            │
-│        ├─▶ check_historical_labels (binary classifier per label)            │
+│        ├─▶ classify_ticket_categories (from predefined taxonomy)            │
 │        ├─▶ generate_business_labels (AI-generated)                          │
 │        └─▶ generate_technical_labels (AI-generated)                         │
+│    └─▶ Generates ticket_embedding (stored for novelty detection)            │
 │    └─▶ Returns partial state: {assigned_labels: [...], status: "success"}   │
 └─────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼ (state merged)
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 4. Resolution Generation Agent (components/resolution/agent.py)             │
+│ 4. Novelty Detection Agent (components/novelty/agent.py)                    │
+│    └─▶ novelty_node(state) called by LangGraph                              │
+│    └─▶ Extracts ticket_embedding and category scores from state             │
+│    └─▶ Calls detect_novelty tool (no LLM calls - pure computation)          │
+│        └─▶ Signal 1: Check if max confidence < 0.5 (40% weight)             │
+│        └─▶ Signal 2: Calculate entropy of confidence distribution (30%)     │
+│        └─▶ Signal 3: Measure embedding distance to centroids (30%)          │
+│        └─▶ Combine signals: novelty_score = weighted average                │
+│        └─▶ Decision: is_novel = (max_conf < 0.5) OR (score > 0.6)           │
+│    └─▶ Returns partial state: {novelty_detected: bool, novelty_score: ...}  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼ (state merged)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 5. Resolution Generation Agent (components/resolution/agent.py)             │
 │    └─▶ resolution_node(state) called by LangGraph                           │
 │    └─▶ Calls generate_resolution_plan tool                                  │
 │        └─▶ Constructs prompt with ticket + similar tickets + labels         │
@@ -439,7 +492,7 @@ POST /api/process-ticket
                                    │
                                    ▼ (state merged)
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 5. Workflow Complete                                                        │
+│ 6. Workflow Complete                                                        │
 │    └─▶ Final state saved to output/ticket_resolution.json                   │
 │    └─▶ CSV export created                                                   │
 │    └─▶ SSE stream sends completion event to frontend                        │
@@ -895,5 +948,14 @@ python3 main.py
 4. **State** flows through the pipeline, each agent adding its output
 5. **LangGraph** orchestrates the sequential execution with error handling
 6. **FAISS** provides fast vector similarity search for historical tickets
+
+### Agent Pipeline (Default Configuration)
+
+```
+Pattern Recognition → Label Assignment → Novelty Detection → Resolution Generation
+      (FAISS)            (3-tier)         (multi-signal)        (Chain-of-Thought)
+```
+
+**Note**: Domain Classification Agent can be optionally enabled by setting `SKIP_DOMAIN_CLASSIFICATION = False` in `src/orchestrator/workflow.py`, which adds it before Pattern Recognition.
 
 The system is designed for **maintainability**: add new agents by creating component folders, modify behavior by editing tools, adjust flow by updating the workflow graph.

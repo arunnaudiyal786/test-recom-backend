@@ -28,7 +28,7 @@ class SessionManager:
                            Defaults to project_root/output/
         """
         if base_output_dir is None:
-            from config import Config
+            from config.config import Config
             self.base_output_dir = Config.PROJECT_ROOT / "output"
         else:
             self.base_output_dir = Path(base_output_dir)

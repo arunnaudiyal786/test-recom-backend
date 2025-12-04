@@ -1,11 +1,3 @@
 {
-  "ticket_id": "JIRA-NEW-001",
-  "title": "MM_ALDER service failing with connection timeout errors",
-  "description": "The MM_ALDER service is experiencing intermittent connection timeout errors when trying to connect to the database. Users are reporting slow response times during peak hours, and we're seeing 504 Gateway Timeout errors in the logs. The issue started happening after yesterday's deployment. Database connection pool metrics show that we're hitting the maximum connection limit (100 connections). Error logs show: 'Connection timeout after 10 seconds' and 'Connection pool exhausted'. This is affecting member eligibility lookups and enrollment processing.",
-  "priority": "High",
-  "metadata": {
-    "reported_by": "ops-team@example.com",
-    "affected_users": 150,
-    "environment": "production"
-  }
+  "description": "Verify AWD setup carries forward when Plan Migration transaction is performed through online portal. This involves batch processing of enrollment records. CONT1_MBR_EFF_DATE:01152025 TO 03152025. CONT2_MBR_EFF_DATE:03152025. AWD Effective date:02152025"
 }

@@ -11,7 +11,10 @@ from typing import Dict, Any, List
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 
-from config import Config
+# Fix Pydantic V2 forward reference issue with ChatOpenAI
+ChatOpenAI.model_rebuild()
+
+from config.config import Config
 from components.resolution.models import (
     ResolutionStep,
     ResolutionPlan
@@ -142,10 +145,10 @@ async def generate_resolution_plan(
         model_kwargs={"response_format": {"type": "json_object"}}
     )
 
-    # Simplified prompt - only generate summary and considerations
-    user_prompt = f"""You are an expert technical support engineer with deep knowledge of healthcare IT systems.
+    # Prompt for synthesized Test Plan generation
+    user_prompt = f"""You are an expert test engineer with deep knowledge of healthcare IT systems.
 
-Generate a summary and additional considerations for resolving the following ticket based on similar historical cases.
+Analyze the similar historical tickets and synthesize a Test Plan for the current ticket.
 
 === CURRENT TICKET ===
 Title: {title}
@@ -159,25 +162,40 @@ Average similarity to historical tickets: {avg_similarity:.2%}
 {historical_context}
 
 === TASK ===
-Based on the similar historical tickets, provide:
-1. An executive summary of the recommended resolution approach
-2. Additional considerations for the support team
-3. References to the most relevant historical tickets
-4. Alternative approaches if the primary resolution doesn't work
-5. A confidence score based on how similar the historical cases are
+Based on the resolution patterns from similar historical tickets, synthesize a **Test Plan** with AT MOST 5 steps.
 
-NOTE: Resolution steps will be extracted directly from similar tickets. Focus on synthesizing the approach.
+Guidelines for synthesizing the Test Plan:
+1. Consolidate similar resolution approaches from multiple tickets into cohesive test steps
+2. Prioritize the most impactful and commonly successful testing actions
+3. Each step should be actionable and specific
+4. Reference which historical tickets informed each step
+5. Keep total steps to 5 or fewer for clarity
+
+Also provide:
+- An executive summary of the recommended test approach
+- Additional considerations for the QA/test team
+- A confidence score based on how similar the historical cases are
 
 === OUTPUT FORMAT (JSON) ===
 {{
-  "summary": "Executive summary of the resolution approach (2-3 sentences)",
+  "summary": "Executive summary of the recommended test approach (2-3 sentences)",
+  "test_plan": [
+    {{
+      "step_number": 1,
+      "description": "Clear, actionable test step synthesized from historical tickets",
+      "validation": "How to verify this step was successful",
+      "source_tickets": ["TICKET-123", "TICKET-456"],
+      "estimated_time_minutes": 15
+    }}
+  ],
   "additional_considerations": ["consideration1", "consideration2"],
   "references": [
     {{"ticket_id": "TICKET-123", "similarity": 0.95, "note": "Similar issue with same root cause"}}
   ],
-  "confidence": 0.85,
-  "alternative_approaches": ["Alternative approach 1", "Alternative approach 2"]
+  "confidence": 0.85
 }}
+
+IMPORTANT: The test_plan array must have AT MOST 5 steps. Synthesize and consolidate related steps.
 
 Respond ONLY with valid JSON."""
 
@@ -199,24 +217,26 @@ Respond ONLY with valid JSON."""
         }
 
     except Exception as e:
-        # Return fallback plan on error with extracted steps
+        # Return fallback test plan on error - limit to 5 steps max
+        fallback_steps = extracted_steps[:5] if extracted_steps else [{
+            "step_number": 1,
+            "description": "Escalate to senior engineer for manual test plan creation",
+            "commands": [],
+            "validation": "N/A",
+            "estimated_time_minutes": 0,
+            "risk_level": "low",
+            "rollback_procedure": None,
+            "source_ticket": None,
+            "source_similarity": None
+        }]
+
         fallback = {
-            "summary": f"Resolution plan based on {len(extracted_steps)} steps from similar tickets. (LLM summary failed: {str(e)})",
+            "summary": f"Test plan based on {len(fallback_steps)} steps from similar tickets. (LLM synthesis failed: {str(e)})",
             "diagnostic_steps": [],
-            "resolution_steps": extracted_steps if extracted_steps else [{
-                "step_number": 1,
-                "description": "Escalate to senior engineer for manual resolution",
-                "commands": [],
-                "validation": "N/A",
-                "estimated_time_minutes": 0,
-                "risk_level": "low",
-                "rollback_procedure": None,
-                "source_ticket": None,
-                "source_similarity": None
-            }],
+            "resolution_steps": fallback_steps,
             "additional_considerations": ["Review similar tickets for additional context"],
             "references": [],
-            "total_estimated_time_hours": round(len(extracted_steps) * 10 / 60, 2),
+            "total_estimated_time_hours": round(len(fallback_steps) * 15 / 60, 2),
             "confidence": avg_similarity if avg_similarity > 0 else 0.5,
             "alternative_approaches": []
         }
@@ -233,20 +253,40 @@ def _build_resolution_plan(
     extracted_steps: List[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
-    Build and validate resolution plan from LLM data and extracted steps.
+    Build and validate resolution plan from LLM data with synthesized test plan.
 
     Args:
-        data: Raw JSON data from LLM response (summary, considerations, etc.)
-        extracted_steps: Pre-extracted resolution steps from similar tickets
+        data: Raw JSON data from LLM response (summary, test_plan, considerations, etc.)
+        extracted_steps: Pre-extracted resolution steps (used as fallback only)
 
     Returns:
         Validated resolution plan dict
     """
-    # Use extracted steps or empty list
-    resolution_steps = extracted_steps if extracted_steps else []
+    # Use LLM-generated test_plan (synthesized steps) - limit to 5 max
+    raw_test_plan = data.get("test_plan", [])[:5]
+
+    # Convert test_plan to resolution_steps format for frontend compatibility
+    resolution_steps = []
+    for i, step in enumerate(raw_test_plan, 1):
+        source_tickets = step.get("source_tickets", [])
+        resolution_steps.append({
+            "step_number": step.get("step_number", i),
+            "description": step.get("description", ""),
+            "commands": [],  # Test plan steps don't have commands
+            "validation": step.get("validation", "Verify step completed"),
+            "estimated_time_minutes": step.get("estimated_time_minutes", 15),
+            "risk_level": "low",
+            "rollback_procedure": None,
+            "source_ticket": ", ".join(source_tickets) if source_tickets else None,
+            "source_similarity": None
+        })
+
+    # Fallback to extracted steps if LLM didn't generate test_plan
+    if not resolution_steps and extracted_steps:
+        resolution_steps = extracted_steps[:5]  # Also limit fallback to 5
 
     # Calculate total time from resolution steps
-    total_minutes = sum(s.get("estimated_time_minutes", 10) for s in resolution_steps)
+    total_minutes = sum(s.get("estimated_time_minutes", 15) for s in resolution_steps)
     total_time = round(total_minutes / 60, 2)
 
     # Process references from LLM response
@@ -267,12 +307,12 @@ def _build_resolution_plan(
             })
 
     return {
-        "summary": data.get("summary", "Resolution plan based on similar historical tickets"),
+        "summary": data.get("summary", "Test plan based on similar historical tickets"),
         "diagnostic_steps": [],  # No longer generating diagnostic steps
-        "resolution_steps": resolution_steps,
+        "resolution_steps": resolution_steps,  # Now contains synthesized test plan steps
         "additional_considerations": data.get("additional_considerations", []),
         "references": references,
         "total_estimated_time_hours": total_time,
         "confidence": data.get("confidence", 0.5),
-        "alternative_approaches": data.get("alternative_approaches", [])
+        "alternative_approaches": []  # Removed alternative_approaches for test plan focus
     }
