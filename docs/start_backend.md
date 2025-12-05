@@ -400,9 +400,11 @@ The backend runs agents **sequentially** in this order:
 ```
 1. Pattern Recognition Agent (FAISS search)
        ↓
-2. Label Assignment Agent (binary classifiers)
+2. Label Assignment Agent (three-tier: category + AI-generated labels)
        ↓
-3. Resolution Generation Agent (Chain-of-Thought)
+3. Novelty Detection Agent (multi-signal analysis, no LLM calls)
+       ↓
+4. Resolution Generation Agent (Chain-of-Thought)
 ```
 
 **Note:** Domain Classification Agent is disabled by default. Enable it in `src/orchestrator/workflow.py`:

@@ -340,24 +340,55 @@ class TicketWorkflowState(TypedDict, total=False):
     priority: str
     metadata: Dict
 
-    # Classification Output
+    # Session Management
+    session_id: Optional[str]  # Unique session ID (YYYYMMDD_HHMMSS_xxxxx)
+    search_config: Optional[Dict]  # Custom search config from UI
+
+    # Classification Output (optional - can be skipped)
     classified_domain: Optional[str]
+    classification_confidence: Optional[float]
+    classification_reasoning: Optional[str]
+    extracted_keywords: Optional[List[str]]
 
     # Retrieval Output
     similar_tickets: Optional[List[Dict]]
+    similarity_scores: Optional[List[float]]
+    search_metadata: Optional[Dict]
 
-    # Labeling Output
-    assigned_labels: Optional[List[str]]
+    # Labeling Output (three-tier system)
+    category_labels: Optional[List[Dict]]   # From predefined taxonomy
+    business_labels: Optional[List[Dict]]   # AI-generated business labels
+    technical_labels: Optional[List[Dict]]  # AI-generated technical labels
+    assigned_labels: Optional[List[str]]    # Combined (backward compat)
+    ticket_embedding: Optional[List[float]] # For novelty detection
+    all_category_scores: Optional[List[Dict]]  # For entropy calculation
+
+    # Novelty Detection Output
+    novelty_detected: Optional[bool]
+    novelty_score: Optional[float]
+    novelty_signals: Optional[Dict]
+    novelty_recommendation: Optional[str]  # "proceed" | "flag_for_review" | "escalate"
+    novelty_reasoning: Optional[str]
 
     # Resolution Output
     resolution_plan: Optional[Dict]
+    resolution_confidence: Optional[float]
+
+    # Prompt Transparency (for UI display)
+    label_assignment_prompts: Optional[Dict[str, str]]
+    resolution_generation_prompt: Optional[str]
 
     # Workflow Control
     status: Literal["processing", "success", "error", "failed"]
     current_agent: str
+    error_message: Optional[str]
 
     # Message Accumulation (uses reducer)
     messages: Annotated[List[Dict], operator.add]
+
+    # Overall Metrics
+    overall_confidence: Optional[float]
+    processing_time_seconds: Optional[float]
 ```
 
 ### Key State Patterns

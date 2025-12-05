@@ -119,13 +119,13 @@ def build_workflow() -> StateGraph:
 
 ---
 
-### **3. State Management: `src/models/state_schema.py`**
+### **3. State Management: `src/orchestrator/state.py`**
 
 The state is a **TypedDict** (not a class) that holds all ticket information as it flows through agents.
 
 ```python
-# src/models/state_schema.py:8-57
-class TicketState(TypedDict, total=False):
+# src/orchestrator/state.py:12-92
+class TicketWorkflowState(TypedDict, total=False):
     """
     The shared state that flows through all 4 agents.
     total=False means agents can update only their fields.
@@ -138,24 +138,43 @@ class TicketState(TypedDict, total=False):
     priority: str
     metadata: Dict
 
-    # AGENT 1 OUTPUT (Classification Agent)
+    # SESSION MANAGEMENT
+    session_id: Optional[str]  # Unique session ID (format: YYYYMMDD_HHMMSS_xxxxx)
+    search_config: Optional[Dict]  # Optional custom search config from UI
+
+    # CLASSIFICATION OUTPUT (optional - can be skipped)
     classified_domain: Optional[str]  # "MM", "CIW", or "Specialty"
     classification_confidence: Optional[float]  # 0.0 to 1.0
     classification_reasoning: Optional[str]
     extracted_keywords: Optional[List[str]]
 
-    # AGENT 2 OUTPUT (Pattern Recognition Agent)
+    # PATTERN RECOGNITION OUTPUT
     similar_tickets: Optional[List[Dict]]  # Top 20 similar tickets
     similarity_scores: Optional[List[float]]
     search_metadata: Optional[Dict]
 
-    # AGENT 3 OUTPUT (Label Assignment Agent)
-    assigned_labels: Optional[List[str]]  # ["Code Fix", "#MM_ALDER"]
-    label_confidence: Optional[Dict[str, float]]
+    # LABEL ASSIGNMENT OUTPUT (three-tier system)
+    category_labels: Optional[List[Dict]]  # From predefined taxonomy
+    business_labels: Optional[List[Dict]]  # AI-generated business labels
+    technical_labels: Optional[List[Dict]]  # AI-generated technical labels
+    assigned_labels: Optional[List[str]]  # Combined (backward compat)
+    ticket_embedding: Optional[List[float]]  # For novelty detection
+    all_category_scores: Optional[List[Dict]]  # For entropy calculation
 
-    # AGENT 4 OUTPUT (Resolution Generation Agent)
+    # NOVELTY DETECTION OUTPUT
+    novelty_detected: Optional[bool]
+    novelty_score: Optional[float]  # 0-1
+    novelty_signals: Optional[Dict]  # Individual signal details
+    novelty_recommendation: Optional[str]  # "proceed" | "flag_for_review" | "escalate"
+    novelty_reasoning: Optional[str]
+
+    # RESOLUTION OUTPUT
     resolution_plan: Optional[Dict]  # Complete fix plan with steps
     resolution_confidence: Optional[float]
+
+    # PROMPT TRANSPARENCY (for UI display)
+    label_assignment_prompts: Optional[Dict[str, str]]
+    resolution_generation_prompt: Optional[str]
 
     # WORKFLOW CONTROL
     status: Literal["processing", "success", "error", "failed"]
@@ -164,6 +183,10 @@ class TicketState(TypedDict, total=False):
 
     # AUDIT TRAIL (accumulates across agents)
     messages: Annotated[List[Dict], operator.add]
+
+    # OVERALL METRICS
+    overall_confidence: Optional[float]
+    processing_time_seconds: Optional[float]
 ```
 
 **Key Insight**: `total=False` allows **partial updates**. Each agent only sets their fields, not the entire state.
@@ -1444,6 +1467,6 @@ Pattern Recognition → Label Assignment → Novelty Detection → Resolution Ge
 
 ---
 
-**Document Version**: 2.0
-**Last Updated**: 2025-12-03
+**Document Version**: 2.1
+**Last Updated**: 2025-12-05
 **Authors**: Codebase Analysis Team

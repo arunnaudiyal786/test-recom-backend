@@ -363,6 +363,22 @@ lsof -ti:8000 | xargs kill -9
 | `/api/save-search-config` | POST | Save search configuration |
 | `/api/load-search-config` | GET | Load saved search config |
 
+### Session Management
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/sessions` | GET | List all processing sessions |
+| `/api/sessions/{session_id}` | GET | Get details for a specific session |
+| `/api/sessions/{session_id}/output` | GET | Get full output for session |
+| `/api/sessions/{session_id}/agents/{agent_name}` | GET | Get specific agent output |
+| `/api/sessions/{session_id}/csv` | GET | Download CSV for session |
+
+### Prompt Transparency
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/prompts` | GET | Get prompts from last processing run |
+
 ### Component APIs (v2)
 
 | Endpoint | Description |
@@ -373,3 +389,31 @@ lsof -ti:8000 | xargs kill -9
 | `/v2/labeling/*` | Label assignment |
 
 Full API documentation: http://localhost:8000/docs
+
+---
+
+## 12. Session Management
+
+Each ticket processing run creates a unique session with ID format: `YYYYMMDD_HHMMSS_xxxxx`.
+
+### View All Sessions
+
+```bash
+curl http://localhost:8000/api/sessions | python3 -m json.tool
+```
+
+### Get Session Details
+
+```bash
+# Replace with your session ID
+curl http://localhost:8000/api/sessions/20241205_142030_a1b2c | python3 -m json.tool
+```
+
+### Get Specific Agent Output
+
+```bash
+# Get resolution output for a session
+curl http://localhost:8000/api/sessions/SESSION_ID/agents/resolution
+```
+
+Sessions are stored in `output/sessions/` directory with full state at each agent step.
