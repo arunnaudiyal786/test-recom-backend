@@ -18,43 +18,72 @@ Both need to be replaced with Horizon equivalents.
 
 | File | Current Dependency | Purpose | Priority |
 |------|-------------------|---------|----------|
-| `src/utils/config.py` | `OPENAI_API_KEY` | API key configuration | **HIGH** |
-| `src/utils/openai_client.py` | `openai.AsyncOpenAI` | Chat completions & embeddings wrapper | **HIGH** |
+| `config/config.py` | `OPENAI_API_KEY` | API key configuration (class-based Config) | **HIGH** |
 | `components/classification/tools.py` | `langchain_openai.ChatOpenAI` | Domain classification | **HIGH** |
-| `components/labeling/tools.py` | `langchain_openai.ChatOpenAI` | Label assignment | **HIGH** |
+| `components/labeling/tools.py` | `langchain.agents.create_agent` + `openai.OpenAI` | Label assignment (hybrid semantic + LLM) | **HIGH** |
 | `components/resolution/tools.py` | `langchain_openai.ChatOpenAI` | Resolution generation | **HIGH** |
-| `components/retrieval/tools.py` | `langchain_openai.OpenAIEmbeddings` | Embedding generation | **HIGH** |
-| `src/vectorstore/embedding_generator.py` | `get_openai_client()` | Embedding for FAISS indexing | **MEDIUM** |
+| `components/retrieval/tools.py` | `openai.OpenAI` embeddings | Embedding generation for search | **HIGH** |
+| `components/labeling/category_embeddings.py` | `openai.OpenAI` embeddings | Pre-computed category embeddings | **MEDIUM** |
+| `src/vectorstore/embedding_generator.py` | `openai.OpenAI` | Embedding for FAISS indexing | **MEDIUM** |
 
 ---
 
-## Step 1: Update Configuration (`src/utils/config.py`)
+## Step 1: Update Configuration (`config/config.py`)
 
-### Current Code (Lines 15-18)
+**Note**: Configuration is now a class-based system in `config/config.py`, not environment variables.
+
+### Current Code (Lines 12-18)
 ```python
-# OpenAI Configuration
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY environment variable is required")
+class Config:
+    """Configuration class for application settings."""
+
+    # OpenAI Configuration (only API key from environment)
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    if not OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY environment variable is required")
 ```
 
 ### Replace With
 ```python
-# Horizon Configuration
-HORIZON_API_KEY = os.getenv("HORIZON_API_KEY")
-HORIZON_BASE_URL = os.getenv("HORIZON_BASE_URL", "https://api.horizon.example.com/v1")
+class Config:
+    """Configuration class for application settings."""
 
-if not HORIZON_API_KEY:
-    raise ValueError("HORIZON_API_KEY environment variable is required")
+    # Horizon Configuration
+    HORIZON_API_KEY = os.getenv("HORIZON_API_KEY")
+    HORIZON_BASE_URL = os.getenv("HORIZON_BASE_URL", "https://api.horizon.example.com/v1")
+
+    if not HORIZON_API_KEY:
+        raise ValueError("HORIZON_API_KEY environment variable is required")
 ```
 
-### Also Update Model Validation (Lines 73-81)
-Remove or update the model validation to match Horizon's available models:
+### Also Update Model Settings (Lines 21-23)
+Update the model attributes to match Horizon's available models:
 ```python
-# Update to Horizon model names
-CLASSIFICATION_MODEL = os.getenv("CLASSIFICATION_MODEL", "horizon-chat-v1")
-RESOLUTION_MODEL = os.getenv("RESOLUTION_MODEL", "horizon-chat-v1")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "horizon-embed-v1")
+# ========== MODEL CONFIGURATION ==========
+CLASSIFICATION_MODEL = "horizon-chat-v1"
+RESOLUTION_MODEL = "horizon-chat-v1"
+EMBEDDING_MODEL = "horizon-embed-v1"
+```
+
+### Update Model Validation (Lines 112-120)
+```python
+@classmethod
+def validate(cls):
+    """Validate configuration settings."""
+    if not cls.HORIZON_API_KEY:
+        raise ValueError("HORIZON_API_KEY is required")
+
+    # Update to Horizon model names
+    valid_chat_models = ["horizon-chat-v1", "horizon-chat-v2"]
+    valid_embed_models = ["horizon-embed-v1"]
+
+    if cls.CLASSIFICATION_MODEL not in valid_chat_models:
+        raise ValueError(f"Invalid CLASSIFICATION_MODEL: {cls.CLASSIFICATION_MODEL}")
+
+    if cls.EMBEDDING_MODEL not in valid_embed_models:
+        raise ValueError(f"Invalid EMBEDDING_MODEL: {cls.EMBEDDING_MODEL}")
+
+    return True
 ```
 
 ---
@@ -218,14 +247,36 @@ get_openai_client = get_horizon_client
 
 ## Step 3: Update LangChain Components
 
-The components use LangChain's `ChatOpenAI` and `OpenAIEmbeddings`. You have two options:
+The components use multiple patterns for LLM integration:
+1. **Direct OpenAI SDK**: `openai.OpenAI` for embeddings
+2. **LangChain ChatOpenAI**: For classification and resolution
+3. **LangChain create_agent**: For label assignment (uses model name string)
 
-### Option A: Use Custom LangChain Integration (Recommended)
+### Pattern 1: Direct OpenAI SDK (Embeddings)
 
-If Horizon has OpenAI-compatible API, you can use LangChain's `ChatOpenAI` with a custom base URL:
+Used in `components/labeling/tools.py` and `components/retrieval/tools.py`:
 
 ```python
-# In components/classification/tools.py (Line 158)
+# BEFORE:
+from openai import OpenAI
+client = OpenAI(api_key=Config.OPENAI_API_KEY)
+response = client.embeddings.create(model=Config.EMBEDDING_MODEL, input=text)
+
+# AFTER (Option A - OpenAI-compatible API):
+from openai import OpenAI
+client = OpenAI(
+    api_key=Config.HORIZON_API_KEY,
+    base_url=Config.HORIZON_BASE_URL
+)
+response = client.embeddings.create(model=Config.EMBEDDING_MODEL, input=text)
+```
+
+### Pattern 2: LangChain ChatOpenAI (Classification/Resolution)
+
+If Horizon has OpenAI-compatible API, use custom base URL:
+
+```python
+# In components/classification/tools.py
 # BEFORE:
 llm = ChatOpenAI(
     model=Config.CLASSIFICATION_MODEL,
@@ -243,16 +294,44 @@ llm = ChatOpenAI(
 )
 ```
 
+### Pattern 3: LangChain create_agent (Label Assignment)
+
+The labeling component uses `langchain.agents.create_agent` which takes a model name string:
+
+```python
+# In components/labeling/tools.py (Lines 122-131)
+# BEFORE:
+from langchain.agents import create_agent
+
+agent = create_agent(
+    model=Config.CATEGORY_CLASSIFICATION_MODEL,  # "gpt-4o"
+    tools=[submit_classification_result],
+    system_prompt=BINARY_CLASSIFICATION_SYSTEM_PROMPT
+)
+
+# AFTER (requires custom model provider or LangChain Horizon integration):
+# Option A: If Horizon supports OpenAI-compatible model names
+agent = create_agent(
+    model="horizon-chat-v1",  # Use Horizon model name
+    tools=[submit_classification_result],
+    system_prompt=BINARY_CLASSIFICATION_SYSTEM_PROMPT
+)
+
+# Option B: Create custom model binding
+# This may require implementing a custom LangChain model class
+# See LangChain documentation for custom chat model integration
+```
+
 ### Option B: Create Custom LangChain LLM Class
 
-If Horizon has a different API format:
+If Horizon has a different API format, create a custom chat model:
 
 ```python
 # Create: components/base/horizon_llm.py
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, AIMessage
 from typing import List, Optional, Any
-from config import Config
+from config.config import Config
 
 
 class HorizonChatModel(BaseChatModel):
@@ -350,15 +429,24 @@ TOP_K_SIMILAR_TICKETS=20
 
 | Priority | File | Changes Required |
 |----------|------|------------------|
-| 1 | `src/utils/config.py` | Replace `OPENAI_API_KEY` with `HORIZON_API_KEY` + `HORIZON_BASE_URL` |
-| 2 | `src/utils/openai_client.py` | Rename to `horizon_client.py`, update client class |
-| 3 | `components/classification/tools.py:158` | Update `ChatOpenAI` instantiation |
-| 4 | `components/labeling/tools.py:165,234,321` | Update `ChatOpenAI` instantiation (3 places) |
-| 5 | `components/resolution/tools.py:86` | Update `ChatOpenAI` instantiation |
-| 6 | `components/retrieval/tools.py:68` | Update `OpenAIEmbeddings` instantiation |
-| 7 | `src/vectorstore/embedding_generator.py:15` | Update to use `get_horizon_client()` |
-| 8 | `.env.example` | Update environment variable names |
-| 9 | `requirements.txt` | Add Horizon SDK, optionally remove `openai` |
+| 1 | `config/config.py` | Replace `OPENAI_API_KEY` with `HORIZON_API_KEY` + `HORIZON_BASE_URL` |
+| 2 | `components/labeling/tools.py` | Update `create_agent` model names and `OpenAI` embeddings client (Lines 21, 123, 145, 167, 223) |
+| 3 | `components/classification/tools.py` | Update `ChatOpenAI` instantiation |
+| 4 | `components/resolution/tools.py` | Update `ChatOpenAI` instantiation |
+| 5 | `components/retrieval/tools.py` | Update `OpenAI` embeddings client |
+| 6 | `components/labeling/category_embeddings.py` | Update `OpenAI` embeddings client |
+| 7 | `src/vectorstore/embedding_generator.py` | Update to use Horizon embedding client |
+| 8 | `.env` | Update environment variable: `HORIZON_API_KEY` instead of `OPENAI_API_KEY` |
+| 9 | `requirements.txt` | Add Horizon SDK if needed |
+
+### Additional Considerations for create_agent
+
+The `langchain.agents.create_agent` function in `components/labeling/tools.py` takes a model name as a string. If Horizon requires a custom model binding, you may need to:
+
+1. Register a custom model provider with LangChain
+2. Or modify the `create_agent` calls to use a pre-configured LLM instance instead of a model name string
+
+Check LangChain documentation for `create_agent` with custom models.
 
 ---
 

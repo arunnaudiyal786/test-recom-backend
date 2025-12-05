@@ -62,17 +62,25 @@ cp .env.example .env
 # OPENAI_API_KEY=sk-your-actual-key-here
 ```
 
-**Environment variables explained:**
+**Configuration explained:**
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPENAI_API_KEY` | (required) | Your OpenAI API key |
-| `CLASSIFICATION_MODEL` | `gpt-4o-mini` | Model for domain classification |
+Configuration is now centralized in `config/config.py` as a class. Only `OPENAI_API_KEY` comes from environment.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `OPENAI_API_KEY` | (env required) | Your OpenAI API key |
+| `CLASSIFICATION_MODEL` | `gpt-4o` | Model for classification agents |
 | `RESOLUTION_MODEL` | `gpt-4o` | Model for resolution generation |
-| `TOP_K_SIMILAR_TICKETS` | `20` | Number of similar tickets to retrieve |
+| `EMBEDDING_MODEL` | `text-embedding-3-large` | Model for embeddings (3072 dims) |
+| `TOP_K_SIMILAR_TICKETS` | `10` | Number of similar tickets to retrieve |
 | `CLASSIFICATION_CONFIDENCE_THRESHOLD` | `0.7` | Minimum confidence for classification |
 | `LABEL_CONFIDENCE_THRESHOLD` | `0.7` | Minimum confidence for label assignment |
-| `API_PORT` | `8000` | Backend server port |
+| `SEMANTIC_TOP_K_CANDIDATES` | `5` | Candidates from semantic pre-filtering |
+| `ENSEMBLE_SEMANTIC_WEIGHT` | `0.4` | Weight for semantic similarity (labeling) |
+| `ENSEMBLE_LLM_WEIGHT` | `0.6` | Weight for LLM confidence (labeling) |
+| `NOVELTY_SCORE_THRESHOLD` | `0.6` | Threshold for novelty detection |
+
+**Note**: To change settings, edit `config/config.py` directly. The `.env` file is only used for the API key.
 
 ### 3. Generate Sample Historical Data
 
@@ -194,10 +202,13 @@ curl http://localhost:8000/api/config
   "active_agents": [
     "Pattern Recognition Agent",
     "Label Assignment Agent",
+    "Novelty Detection Agent",
     "Resolution Generation Agent"
   ]
 }
 ```
+
+**Note**: The SSE streaming in `api_server.py` lists 3 agents for UI progress tracking (Pattern Recognition, Label Assignment, Resolution Generation), but the actual workflow runs 4 agents including Novelty Detection. This is because Novelty Detection is a fast, non-LLM step that runs transparently between Label Assignment and Resolution Generation.
 
 ### Check Vector Store Stats
 
@@ -304,6 +315,12 @@ curl http://localhost:8000/api/download-csv -o results.csv
 | `GET` | `/api/sessions/{id}/agents/{name}` | Get specific agent output |
 | `GET` | `/api/sessions/{id}/csv` | Download session's CSV |
 
+**Available agent names for `/api/sessions/{id}/agents/{name}`:**
+- `patternRecognition` - Similar ticket search results
+- `labelAssignment` - Category and label assignments
+- `novelty` - Novelty detection results (new!)
+- `resolutionGeneration` - Resolution plan
+
 ### Component Endpoints (v2)
 
 | Method | Endpoint | Description |
@@ -385,32 +402,50 @@ curl -X POST http://localhost:8000/v2/retrieval/search \
 
 | File | Purpose |
 |------|---------|
-| `.env` | Environment variables |
+| `.env` | OpenAI API key (only env var used) |
+| `config/config.py` | Centralized configuration class |
 | `config/schema_config.yaml` | Domain/label definitions for UI |
-| `config/search_config.json` | Saved search parameters |
+| `config/search_config.json` | Saved search parameters (auto-generated) |
 | `input/current_ticket.json` | Sample input ticket |
-| `data/raw/historical_tickets.csv` | Historical ticket data |
-| `data/faiss/tickets.index` | FAISS vector index |
-| `data/faiss/metadata.json` | Ticket metadata for retrieval |
+| `data/raw/test_plan_historical.csv` | Historical ticket data (default) |
+| `data/faiss_index/tickets.index` | FAISS vector index |
+| `data/faiss_index/metadata.json` | Ticket metadata for retrieval |
+| `data/metadata/categories.json` | Category taxonomy definitions |
+| `data/metadata/category_embeddings.json` | Pre-computed category embeddings |
 
 ### Agent Pipeline
 
 The backend runs agents **sequentially** in this order:
 
 ```
-1. Pattern Recognition Agent (FAISS search)
+1. Pattern Recognition Agent (FAISS search + hybrid scoring)
        ↓
-2. Label Assignment Agent (three-tier: category + AI-generated labels)
+2. Label Assignment Agent (hybrid semantic + LLM ensemble classification)
        ↓
 3. Novelty Detection Agent (multi-signal analysis, no LLM calls)
        ↓
 4. Resolution Generation Agent (Chain-of-Thought)
 ```
 
+| Agent | Purpose | LLM Calls |
+|-------|---------|-----------|
+| Pattern Recognition | FAISS similarity search + hybrid scoring | 1 (embedding) |
+| Label Assignment | Semantic pre-filtering + parallel binary classifiers | 5-8 (agents) |
+| Novelty Detection | Confidence, entropy, centroid distance analysis | 0 |
+| Resolution Generation | Chain-of-Thought resolution plan | 1 (gpt-4o) |
+
 **Note:** Domain Classification Agent is disabled by default. Enable it in `src/orchestrator/workflow.py`:
 ```python
 SKIP_DOMAIN_CLASSIFICATION = False
 ```
+
+**Label Assignment Pipeline (Hybrid Semantic + LLM):**
+1. Generate ticket embedding
+2. Compute cosine similarity to pre-computed category embeddings
+3. Select TOP-5 candidates above threshold (0.3)
+4. Run parallel binary classifiers using `langchain.agents.create_agent`
+5. Compute ensemble scores: 40% semantic + 60% LLM confidence
+6. Filter by threshold and limit to max 3 categories
 
 ---
 

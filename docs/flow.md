@@ -87,21 +87,31 @@ test-recom-backend/
 ├── api_server.py              # FastAPI app - HTTP entry point
 ├── main.py                    # CLI entry point for batch processing
 │
-├── components/                # NEW ARCHITECTURE - LangChain-style agents
+├── config/                    # Configuration files (CURRENT LOCATION)
+│   ├── config.py              # Config class with all settings
+│   ├── schema_config.yaml     # Domain/label definitions for UI
+│   └── search_config.json     # Saved search parameters (auto-generated)
+│
+├── components/                # CURRENT ARCHITECTURE - LangChain-style agents
 │   ├── base/                  # Abstract base classes
 │   │   ├── component.py       # BaseComponent ABC
 │   │   ├── config.py          # ComponentConfig (Pydantic Settings)
 │   │   └── exceptions.py      # Custom exception classes
 │   │
-│   ├── classification/        # Domain Classification Agent (optional)
+│   ├── classification/        # Domain Classification Agent (optional, skipped by default)
 │   ├── retrieval/             # Pattern Recognition Agent (FAISS search)
-│   ├── labeling/              # Label Assignment Agent
+│   ├── labeling/              # Label Assignment Agent (hybrid semantic + LLM)
+│   │   ├── agent.py           # LangGraph node wrapper
+│   │   ├── tools.py           # @tool functions with create_agent for classification
+│   │   ├── prompts.py         # Classification and label generation prompts
+│   │   ├── service.py         # CategoryTaxonomy for taxonomy management
+│   │   └── category_embeddings.py  # Pre-computed category embeddings
 │   ├── novelty/               # Novelty Detection Agent (multi-signal analysis)
 │   ├── resolution/            # Resolution Generation Agent
 │   └── embedding/             # Utility service (not an agent)
 │
 ├── src/
-│   ├── agents/                # OLD ARCHITECTURE - class-based agents (legacy)
+│   ├── agents/                # LEGACY ARCHITECTURE - class-based agents (deprecated)
 │   │   ├── pattern_recognition_agent.py
 │   │   ├── label_assignment_agent.py
 │   │   └── resolution_generation_agent.py
@@ -110,7 +120,7 @@ test-recom-backend/
 │   │   ├── state.py           # TicketWorkflowState TypedDict
 │   │   └── workflow.py        # StateGraph construction
 │   │
-│   ├── prompts/               # LLM prompt templates
+│   ├── prompts/               # LLM prompt templates (legacy)
 │   │   ├── classification_prompts.py
 │   │   ├── label_assignment_prompts.py
 │   │   └── resolution_generation_prompts.py
@@ -121,16 +131,21 @@ test-recom-backend/
 │   │   └── data_ingestion.py  # CSV to embeddings to FAISS
 │   │
 │   ├── models/                # Pydantic models
-│   └── utils/                 # Config, helpers, OpenAI client
+│   └── utils/                 # Helpers, OpenAI client, session manager
 │
 ├── data/
-│   ├── raw/historical_tickets.csv     # Source data
-│   └── faiss_index/                   # Built index + metadata
-│       ├── tickets.index              # FAISS binary index
-│       └── metadata.json              # Ticket metadata
+│   ├── raw/test_plan_historical.csv   # Source data (default CSV file)
+│   ├── faiss_index/                   # Built index + metadata
+│   │   ├── tickets.index              # FAISS binary index
+│   │   └── metadata.json              # Ticket metadata
+│   └── metadata/                      # Category taxonomy & embeddings
+│       ├── categories.json            # Category definitions
+│       └── category_embeddings.json   # Pre-computed embeddings for semantic search
 │
 ├── input/current_ticket.json  # Sample input for testing
-├── output/                    # Processing results
+├── output/                    # Processing results (session-based)
+│   ├── latest/                # Symlink to most recent session
+│   └── DDMMYYYYHHMM_xxxxx/    # Individual session directories
 └── scripts/                   # Setup and utility scripts
 ```
 
@@ -486,14 +501,32 @@ POST /api/process-ticket
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 3. Label Assignment Agent (components/labeling/agent.py)                    │
 │    └─▶ labeling_node(state) called by LangGraph                             │
-│    └─▶ Calls extract_candidate_labels tool                                  │
-│        └─▶ Extracts unique labels from similar_tickets                      │
-│    └─▶ Runs 3 PARALLEL tasks via asyncio.gather:                            │
-│        ├─▶ classify_ticket_categories (from predefined taxonomy)            │
-│        ├─▶ generate_business_labels (AI-generated)                          │
-│        └─▶ generate_technical_labels (AI-generated)                         │
-│    └─▶ Generates ticket_embedding (stored for novelty detection)            │
-│    └─▶ Returns partial state: {assigned_labels: [...], status: "success"}   │
+│    └─▶ Runs HYBRID SEMANTIC + LLM classification pipeline:                  │
+│                                                                             │
+│    STEP 1: Generate ticket embedding (1 OpenAI API call)                    │
+│        └─▶ Uses text-embedding-3-large (3072 dimensions)                    │
+│                                                                             │
+│    STEP 2: Semantic pre-filtering (no API call)                             │
+│        └─▶ Computes cosine similarity to ALL category embeddings            │
+│        └─▶ Pre-computed embeddings in data/metadata/category_embeddings.json│
+│                                                                             │
+│    STEP 3: Select TOP-5 candidates above similarity threshold (0.3)         │
+│                                                                             │
+│    STEP 4: Run PARALLEL binary classifiers using langchain.agents.create_agent│
+│        └─▶ Uses submit_classification_result tool for structured output     │
+│        └─▶ 5 parallel agent invocations for top candidates                  │
+│                                                                             │
+│    STEP 5: Compute ENSEMBLE scores: 40% semantic + 60% LLM confidence       │
+│                                                                             │
+│    STEP 6: Filter by threshold and limit to max 3 categories                │
+│                                                                             │
+│    └─▶ Also runs in PARALLEL via asyncio.gather:                            │
+│        ├─▶ generate_business_labels (AI-generated, using create_agent)      │
+│        └─▶ generate_technical_labels (AI-generated, using create_agent)     │
+│                                                                             │
+│    └─▶ Passes ticket_embedding and all_category_scores to novelty detection │
+│    └─▶ Returns partial state: {category_labels, business_labels,            │
+│                                technical_labels, ticket_embedding, ...}     │
 └─────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼ (state merged)
@@ -960,14 +993,23 @@ python3 main.py
 | `components/*/tools.py` | Business logic |
 | `src/vectorstore/faiss_manager.py` | FAISS operations |
 
-### Environment Variables
+### Configuration (config/config.py)
 
-| Variable | Purpose |
-|----------|---------|
-| `OPENAI_API_KEY` | Required for all LLM calls |
-| `TOP_K_SIMILAR_TICKETS` | Number of similar tickets (default: 20) |
-| `CLASSIFICATION_MODEL` | Model for classification |
-| `RESOLUTION_MODEL` | Model for resolution generation |
+**Note**: Configuration is now centralized in `config/config.py` as a class with attributes, NOT environment variables. Only `OPENAI_API_KEY` comes from environment.
+
+| Attribute | Default | Purpose |
+|-----------|---------|---------|
+| `OPENAI_API_KEY` | (env) | Required for all LLM calls |
+| `CLASSIFICATION_MODEL` | `gpt-4o` | Model for classification |
+| `RESOLUTION_MODEL` | `gpt-4o` | Model for resolution generation |
+| `EMBEDDING_MODEL` | `text-embedding-3-large` | Model for embeddings (3072 dims) |
+| `TOP_K_SIMILAR_TICKETS` | `10` | Number of similar tickets to retrieve |
+| `CLASSIFICATION_CONFIDENCE_THRESHOLD` | `0.7` | Minimum confidence for classification |
+| `LABEL_CONFIDENCE_THRESHOLD` | `0.7` | Minimum confidence for label assignment |
+| `SEMANTIC_TOP_K_CANDIDATES` | `5` | Candidates from semantic pre-filtering |
+| `ENSEMBLE_SEMANTIC_WEIGHT` | `0.4` | Weight for semantic similarity in labeling |
+| `ENSEMBLE_LLM_WEIGHT` | `0.6` | Weight for LLM confidence in labeling |
+| `NOVELTY_SCORE_THRESHOLD` | `0.6` | Threshold for novelty detection |
 
 ---
 
@@ -976,17 +1018,42 @@ python3 main.py
 1. **Components (`components/`)** contain the modern LangChain-style agents
 2. **Wrappers (`agent.py`)** bridge LangGraph state and tool parameters
 3. **Tools (`tools.py`)** contain actual business logic with `@tool` decorators
-4. **State** flows through the pipeline, each agent adding its output
-5. **LangGraph** orchestrates the sequential execution with error handling
-6. **FAISS** provides fast vector similarity search for historical tickets
+4. **Agents** use `langchain.agents.create_agent` for LLM-powered classification
+5. **State** flows through the pipeline, each agent adding its output
+6. **LangGraph** orchestrates the sequential execution with error handling
+7. **FAISS** provides fast vector similarity search for historical tickets
 
 ### Agent Pipeline (Default Configuration)
 
 ```
 Pattern Recognition → Label Assignment → Novelty Detection → Resolution Generation
-      (FAISS)            (3-tier)         (multi-signal)        (Chain-of-Thought)
+      (FAISS)        (hybrid semantic    (multi-signal,     (Chain-of-Thought)
+                      + LLM ensemble)     no LLM calls)
 ```
 
+| Agent | Purpose | LLM Calls |
+|-------|---------|-----------|
+| Pattern Recognition | FAISS similarity search + hybrid scoring | 1 (embedding only) |
+| Label Assignment | Hybrid semantic + LLM category classification | 5-8 (parallel agents) |
+| Novelty Detection | Multi-signal analysis (confidence, entropy, distance) | 0 (pure computation) |
+| Resolution Generation | Chain-of-Thought resolution plan | 1 (gpt-4o) |
+
 **Note**: Domain Classification Agent can be optionally enabled by setting `SKIP_DOMAIN_CLASSIFICATION = False` in `src/orchestrator/workflow.py`, which adds it before Pattern Recognition.
+
+### Key Architectural Pattern: `langchain.agents.create_agent`
+
+The Label Assignment Agent uses `langchain.agents.create_agent` to create LangChain agents that:
+- Have a system prompt defining their role
+- Use specific tools (`submit_classification_result`, `submit_business_labels`, etc.)
+- Return structured JSON output via tool calls
+
+```python
+# Example from components/labeling/tools.py
+agent = create_agent(
+    model="gpt-4o",
+    tools=[submit_classification_result],  # Tool for structured output
+    system_prompt=BINARY_CLASSIFICATION_SYSTEM_PROMPT
+)
+```
 
 The system is designed for **maintainability**: add new agents by creating component folders, modify behavior by editing tools, adjust flow by updating the workflow graph.
