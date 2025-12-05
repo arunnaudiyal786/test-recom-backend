@@ -3,23 +3,31 @@ Resolution Tools - LangChain @tool decorated functions for resolution generation
 
 These tools extract resolution steps from similar historical tickets and generate
 comprehensive resolution plans with summary and considerations.
+
+Uses LangChain's create_agent for agent-based resolution generation as LangGraph nodes.
 """
 
 import json
 from typing import Dict, Any, List
 
 from langchain_core.tools import tool
-from langchain_openai import ChatOpenAI
-
-# Fix Pydantic V2 forward reference issue with ChatOpenAI
-ChatOpenAI.model_rebuild()
+from langchain.agents import create_agent
 
 from config.config import Config
 from components.resolution.models import (
     ResolutionStep,
     ResolutionPlan
 )
+from components.resolution.prompts import (
+    RESOLUTION_SYSTEM_PROMPT,
+    get_resolution_user_prompt,
+    format_historical_context
+)
 
+
+# ============================================================================
+# TOOLS FOR RESOLUTION AGENT
+# ============================================================================
 
 @tool
 def analyze_similar_resolutions(similar_tickets: List[Dict[str, Any]]) -> str:
@@ -35,24 +43,7 @@ def analyze_similar_resolutions(similar_tickets: List[Dict[str, Any]]) -> str:
     Returns:
         Formatted string of historical resolution patterns
     """
-    if not similar_tickets:
-        return "No similar historical tickets available."
-
-    context_parts = []
-    for i, ticket in enumerate(similar_tickets[:5], 1):
-        resolution = ticket.get("resolution", "No resolution recorded")
-        context_parts.append(f"""
---- Historical Ticket {i} ---
-ID: {ticket.get('ticket_id', 'N/A')}
-Title: {ticket.get('title', 'N/A')}
-Similarity: {ticket.get('similarity_score', 0):.2%}
-Labels: {', '.join(ticket.get('labels', []))}
-Resolution Time: {ticket.get('resolution_time_hours', 'N/A')} hours
-Resolution:
-{resolution}
-""")
-
-    return "\n".join(context_parts)
+    return format_historical_context(similar_tickets)
 
 
 def _extract_resolution_steps_from_tickets(
@@ -90,6 +81,7 @@ def _extract_resolution_steps_from_tickets(
                 steps.append({
                     "step_number": step_number,
                     "description": step_desc,
+                    "expected_result": f"Step completed successfully as per {ticket_id}",
                     "commands": [],
                     "validation": f"Verify as per ticket {ticket_id}",
                     "estimated_time_minutes": 10,
@@ -103,6 +95,122 @@ def _extract_resolution_steps_from_tickets(
     return steps
 
 
+# ============================================================================
+# RESPONSE TOOL FOR RESOLUTION AGENT
+# ============================================================================
+
+def generate_test_plan_response(
+    summary: str,
+    test_plan: List[Dict[str, Any]],
+    additional_considerations: List[str],
+    references: List[Dict[str, Any]],
+    confidence: float
+) -> str:
+    """
+    Generate the final test plan response in JSON format.
+
+    This tool is used by the Resolution Agent to output the synthesized test plan.
+    The agent analyzes similar tickets and calls this tool to structure its response.
+
+    Args:
+        summary: Executive summary of the recommended test approach (2-3 sentences)
+        test_plan: List of test steps with step_number, description, expected_result,
+                   validation, source_tickets, and estimated_time_minutes
+        additional_considerations: List of additional considerations for the QA/test team
+        references: List of reference dicts with ticket_id, similarity, and note
+        confidence: Confidence score based on similar case similarity (0.0-1.0)
+
+    Returns:
+        JSON string of the complete test plan
+    """
+    result = {
+        "summary": summary,
+        "test_plan": test_plan[:5],  # Limit to 5 steps
+        "additional_considerations": additional_considerations,
+        "references": references,
+        "confidence": confidence
+    }
+    return json.dumps(result)
+
+
+# Create the tool using @tool decorator
+@tool
+def submit_test_plan(
+    summary: str,
+    test_plan: str,
+    additional_considerations: str,
+    references: str,
+    confidence: float
+) -> str:
+    """
+    Submit the final test plan response.
+
+    The agent should call this tool after analyzing similar tickets to output
+    the synthesized test plan in the required JSON format.
+
+    Args:
+        summary: Executive summary of the recommended test approach (2-3 sentences)
+        test_plan: JSON string of test steps array
+        additional_considerations: JSON string of considerations array
+        references: JSON string of references array
+        confidence: Confidence score (0.0-1.0)
+
+    Returns:
+        Confirmation message
+    """
+    return json.dumps({
+        "summary": summary,
+        "test_plan": json.loads(test_plan) if test_plan else [],
+        "additional_considerations": json.loads(additional_considerations) if additional_considerations else [],
+        "references": json.loads(references) if references else [],
+        "confidence": confidence
+    })
+
+
+# ============================================================================
+# RESOLUTION AGENT CREATION
+# ============================================================================
+
+def create_resolution_agent():
+    """
+    Create a LangChain agent for resolution generation.
+
+    Uses langchain.agents.create_agent to build a graph-based agent runtime.
+    The agent uses the submit_test_plan tool to output its synthesized test plan.
+
+    Returns:
+        CompiledStateGraph: A LangChain agent configured for test plan generation
+    """
+    # Use model name string format for create_agent
+    # Format: "provider:model" or just "model" for OpenAI
+    model_name = Config.RESOLUTION_MODEL  # e.g., "gpt-4o" or "gpt-4o-mini"
+
+    # Create the agent with system prompt and response tool
+    agent = create_agent(
+        model=model_name,
+        tools=[submit_test_plan],  # Tool for outputting the test plan
+        system_prompt=RESOLUTION_SYSTEM_PROMPT
+    )
+
+    return agent
+
+
+# Singleton agent instance (created lazily)
+_resolution_agent = None
+
+
+def get_resolution_agent():
+    """Get or create the resolution agent singleton."""
+    global _resolution_agent
+    if _resolution_agent is None:
+        _resolution_agent = create_resolution_agent()
+    return _resolution_agent
+
+
+# ============================================================================
+# MAIN RESOLUTION GENERATION FUNCTION
+# ============================================================================
+
 @tool
 async def generate_resolution_plan(
     title: str,
@@ -114,10 +222,10 @@ async def generate_resolution_plan(
     avg_similarity: float
 ) -> Dict[str, Any]:
     """
-    Generate a comprehensive resolution plan by extracting steps from similar tickets.
+    Generate a comprehensive resolution plan using the resolution agent.
 
-    Extracts resolution steps from similar historical tickets and uses LLM to
-    generate a summary and additional considerations.
+    Uses LangChain's create_agent to analyze historical tickets and
+    generate a synthesized test plan. The agent runs as a LangGraph node.
 
     Args:
         title: Ticket title
@@ -132,83 +240,59 @@ async def generate_resolution_plan(
         Dict containing:
         - resolution_plan: Complete resolution plan dict
         - confidence: Confidence score (0-1)
+        - actual_prompt: The prompt sent to the agent
     """
-    # Extract resolution steps from similar tickets
+    # Extract resolution steps from similar tickets (as fallback)
     extracted_steps = _extract_resolution_steps_from_tickets(similar_tickets, max_tickets=5)
 
-    # Build historical context for LLM summary generation
-    historical_context = analyze_similar_resolutions.invoke({"similar_tickets": similar_tickets})
+    # Build historical context for the agent
+    historical_context = format_historical_context(similar_tickets)
 
-    llm = ChatOpenAI(
-        model=Config.RESOLUTION_MODEL,
-        temperature=0.6,
-        model_kwargs={"response_format": {"type": "json_object"}}
+    # Generate the user prompt
+    user_prompt = get_resolution_user_prompt(
+        title=title,
+        description=description,
+        domain=domain,
+        priority=priority,
+        labels=labels,
+        historical_context=historical_context,
+        avg_similarity=avg_similarity
     )
 
-    # Prompt for synthesized Test Plan generation
-    user_prompt = f"""You are an expert test engineer with deep knowledge of healthcare IT systems.
-
-Analyze the similar historical tickets and synthesize a Test Plan for the current ticket.
-
-=== CURRENT TICKET ===
-Title: {title}
-Description: {description}
-Domain: {domain}
-Priority: {priority}
-Labels: {', '.join(labels)}
-Average similarity to historical tickets: {avg_similarity:.2%}
-
-=== SIMILAR HISTORICAL TICKETS ===
-{historical_context}
-
-=== TASK ===
-Based on the resolution patterns from similar historical tickets, synthesize a **Test Plan** with AT MOST 5 steps.
-
-Guidelines for synthesizing the Test Plan:
-1. Consolidate similar resolution approaches from multiple tickets into cohesive test steps
-2. Prioritize the most impactful and commonly successful testing actions
-3. Each step should be actionable and specific
-4. Reference which historical tickets informed each step
-5. Keep total steps to 5 or fewer for clarity
-
-Also provide:
-- An executive summary of the recommended test approach
-- Additional considerations for the QA/test team
-- A confidence score based on how similar the historical cases are
-
-=== OUTPUT FORMAT (JSON) ===
-{{
-  "summary": "Executive summary of the recommended test approach (2-3 sentences)",
-  "test_plan": [
-    {{
-      "step_number": 1,
-      "description": "Clear, actionable test step synthesized from historical tickets",
-      "expected_result": "The specific expected outcome when this test step passes successfully",
-      "validation": "How to verify this step was successful",
-      "source_tickets": ["TICKET-123", "TICKET-456"],
-      "estimated_time_minutes": 15
-    }}
-  ],
-  "additional_considerations": ["consideration1", "consideration2"],
-  "references": [
-    {{"ticket_id": "TICKET-123", "similarity": 0.95, "note": "Similar issue with same root cause"}}
-  ],
-  "confidence": 0.85
-}}
-
-IMPORTANT:
-- The test_plan array must have AT MOST 5 steps. Synthesize and consolidate related steps.
-- Each test step MUST include an expected_result that describes what success looks like.
-
-Respond ONLY with valid JSON."""
-
     try:
-        response = await llm.ainvoke([
-            {"role": "system", "content": "You are an expert technical support engineer. Respond only with valid JSON."},
-            {"role": "user", "content": user_prompt}
-        ])
+        # Get the resolution agent
+        agent = get_resolution_agent()
 
-        data = json.loads(response.content)
+        # Invoke the agent with the user prompt
+        result = await agent.ainvoke({
+            "messages": [{"role": "user", "content": user_prompt}]
+        })
+
+        # Extract the response from tool messages
+        # create_agent returns tool call results in the messages
+        response_content = None
+        for msg in reversed(result.get("messages", [])):
+            # Check for tool message content
+            if hasattr(msg, "content") and msg.content:
+                try:
+                    # Try to parse as JSON
+                    data = json.loads(msg.content)
+                    if isinstance(data, dict) and ("summary" in data or "test_plan" in data):
+                        response_content = msg.content
+                        break
+                except (json.JSONDecodeError, TypeError):
+                    continue
+            # Also check for structured response
+            if hasattr(msg, "structured_response"):
+                response_content = json.dumps(msg.structured_response)
+                break
+
+        if not response_content:
+            # Fallback: try the last message
+            response_content = result["messages"][-1].content if result.get("messages") else "{}"
+
+        # Parse the JSON response
+        data = json.loads(response_content) if response_content else {}
 
         # Build resolution plan with extracted steps
         resolution_plan = _build_resolution_plan(data, extracted_steps)
@@ -235,7 +319,7 @@ Respond ONLY with valid JSON."""
         }]
 
         fallback = {
-            "summary": f"Test plan based on {len(fallback_steps)} steps from similar tickets. (LLM synthesis failed: {str(e)})",
+            "summary": f"Test plan based on {len(fallback_steps)} steps from similar tickets. (Agent error: {str(e)})",
             "diagnostic_steps": [],
             "resolution_steps": fallback_steps,
             "additional_considerations": ["Review similar tickets for additional context"],
@@ -257,16 +341,16 @@ def _build_resolution_plan(
     extracted_steps: List[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
-    Build and validate resolution plan from LLM data with synthesized test plan.
+    Build and validate resolution plan from agent response data.
 
     Args:
-        data: Raw JSON data from LLM response (summary, test_plan, considerations, etc.)
+        data: Raw JSON data from agent response (summary, test_plan, considerations, etc.)
         extracted_steps: Pre-extracted resolution steps (used as fallback only)
 
     Returns:
         Validated resolution plan dict
     """
-    # Use LLM-generated test_plan (synthesized steps) - limit to 5 max
+    # Use agent-generated test_plan (synthesized steps) - limit to 5 max
     raw_test_plan = data.get("test_plan", [])[:5]
 
     # Convert test_plan to resolution_steps format for frontend compatibility
@@ -286,7 +370,7 @@ def _build_resolution_plan(
             "source_similarity": None
         })
 
-    # Fallback to extracted steps if LLM didn't generate test_plan
+    # Fallback to extracted steps if agent didn't generate test_plan
     if not resolution_steps and extracted_steps:
         resolution_steps = extracted_steps[:5]  # Also limit fallback to 5
 
@@ -294,7 +378,7 @@ def _build_resolution_plan(
     total_minutes = sum(s.get("estimated_time_minutes", 15) for s in resolution_steps)
     total_time = round(total_minutes / 60, 2)
 
-    # Process references from LLM response
+    # Process references from agent response
     references = []
     raw_references = data.get("references", [])
     for ref in raw_references:

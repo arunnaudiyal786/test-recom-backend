@@ -6,6 +6,9 @@ These tools handle category classification using a hybrid semantic + LLM approac
 2. LLM binary classification: Run parallel binary classifiers for top-K candidates
 3. Ensemble scoring: Combine 40% semantic + 60% LLM confidence
 4. Filter and output: Apply threshold and limit to max categories
+
+Uses LangChain's create_agent for agent-based label generation as LangGraph nodes.
+Prompts are sourced from components/labeling/prompts.py.
 """
 
 import json
@@ -13,21 +16,198 @@ import asyncio
 from typing import Dict, Any, List, Tuple
 
 from langchain_core.tools import tool
-from langchain_openai import ChatOpenAI
+from langchain.agents import create_agent
 from openai import OpenAI
 
-# Fix Pydantic V2 forward reference issue with ChatOpenAI
-# This resolves the "BaseCache not fully defined" error
-ChatOpenAI.model_rebuild()
-
 from config.config import Config
-from src.prompts.label_assignment_prompts import (
-    get_category_classification_prompt,
-    get_binary_classification_prompt
+from components.labeling.prompts import (
+    BINARY_CLASSIFICATION_SYSTEM_PROMPT,
+    BUSINESS_LABEL_SYSTEM_PROMPT,
+    TECHNICAL_LABEL_SYSTEM_PROMPT,
+    get_binary_classification_prompt,
+    get_business_label_prompt,
+    get_technical_label_prompt
 )
 from components.labeling.service import CategoryTaxonomy
 from components.labeling.category_embeddings import CategoryEmbeddings
 
+
+# ============================================================================
+# RESPONSE TOOLS FOR LABELING AGENTS
+# ============================================================================
+
+@tool
+def submit_classification_result(
+    decision: bool,
+    confidence: float,
+    reasoning: str
+) -> str:
+    """
+    Submit the binary classification result.
+
+    The agent should call this tool after analyzing whether the ticket
+    belongs to a specific category.
+
+    Args:
+        decision: True if the ticket belongs to this category, False otherwise
+        confidence: Confidence score (0.0-1.0)
+        reasoning: Brief explanation of the classification decision
+
+    Returns:
+        JSON string of the classification result
+    """
+    return json.dumps({
+        "decision": decision,
+        "confidence": confidence,
+        "reasoning": reasoning
+    })
+
+
+@tool
+def submit_business_labels(labels_json: str) -> str:
+    """
+    Submit the generated business labels.
+
+    The agent should call this tool after analyzing the ticket from a
+    business impact perspective.
+
+    Args:
+        labels_json: JSON string of business_labels array with label, confidence, category, reasoning
+
+    Returns:
+        JSON string of the business labels result
+    """
+    try:
+        labels = json.loads(labels_json) if labels_json else []
+    except json.JSONDecodeError:
+        labels = []
+    return json.dumps({"business_labels": labels})
+
+
+@tool
+def submit_technical_labels(labels_json: str) -> str:
+    """
+    Submit the generated technical labels.
+
+    The agent should call this tool after analyzing the ticket from a
+    technical/root-cause perspective.
+
+    Args:
+        labels_json: JSON string of technical_labels array with label, confidence, category, reasoning
+
+    Returns:
+        JSON string of the technical labels result
+    """
+    try:
+        labels = json.loads(labels_json) if labels_json else []
+    except json.JSONDecodeError:
+        labels = []
+    return json.dumps({"technical_labels": labels})
+
+
+# ============================================================================
+# AGENT CREATION FUNCTIONS
+# ============================================================================
+
+def create_binary_classification_agent():
+    """
+    Create a LangChain agent for binary category classification.
+
+    Uses langchain.agents.create_agent to build a graph-based agent runtime.
+    The agent uses submit_classification_result tool to output its decision.
+
+    Returns:
+        CompiledStateGraph: A LangChain agent configured for binary classification
+    """
+    # Use model name string format for create_agent
+    model_name = Config.CATEGORY_CLASSIFICATION_MODEL
+
+    agent = create_agent(
+        model=model_name,
+        tools=[submit_classification_result],  # Tool for outputting classification
+        system_prompt=BINARY_CLASSIFICATION_SYSTEM_PROMPT
+    )
+
+    return agent
+
+
+def create_business_label_agent():
+    """
+    Create a LangChain agent for business label generation.
+
+    Uses langchain.agents.create_agent to build a graph-based agent runtime.
+    The agent uses submit_business_labels tool to output its generated labels.
+
+    Returns:
+        CompiledStateGraph: A LangChain agent configured for business label generation
+    """
+    # Use model name string format for create_agent
+    model_name = Config.CLASSIFICATION_MODEL
+
+    agent = create_agent(
+        model=model_name,
+        tools=[submit_business_labels],  # Tool for outputting business labels
+        system_prompt=BUSINESS_LABEL_SYSTEM_PROMPT
+    )
+
+    return agent
+
+
+def create_technical_label_agent():
+    """
+    Create a LangChain agent for technical label generation.
+
+    Uses langchain.agents.create_agent to build a graph-based agent runtime.
+    The agent uses submit_technical_labels tool to output its generated labels.
+
+    Returns:
+        CompiledStateGraph: A LangChain agent configured for technical label generation
+    """
+    # Use model name string format for create_agent
+    model_name = Config.CLASSIFICATION_MODEL
+
+    agent = create_agent(
+        model=model_name,
+        tools=[submit_technical_labels],  # Tool for outputting technical labels
+        system_prompt=TECHNICAL_LABEL_SYSTEM_PROMPT
+    )
+
+    return agent
+
+
+# Singleton agent instances (created lazily)
+_binary_classification_agent = None
+_business_label_agent = None
+_technical_label_agent = None
+
+
+def get_binary_classification_agent():
+    """Get or create the binary classification agent singleton."""
+    global _binary_classification_agent
+    if _binary_classification_agent is None:
+        _binary_classification_agent = create_binary_classification_agent()
+    return _binary_classification_agent
+
+
+def get_business_label_agent():
+    """Get or create the business label agent singleton."""
+    global _business_label_agent
+    if _business_label_agent is None:
+        _business_label_agent = create_business_label_agent()
+    return _business_label_agent
+
+
+def get_technical_label_agent():
+    """Get or create the technical label agent singleton."""
+    global _technical_label_agent
+    if _technical_label_agent is None:
+        _technical_label_agent = create_technical_label_agent()
+    return _technical_label_agent
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
 
 async def _generate_ticket_embedding(title: str, description: str) -> List[float]:
     """
@@ -58,11 +238,10 @@ async def _binary_classify_category(
     description: str,
     priority: str,
     category_id: str,
-    category_info: Dict[str, Any],
-    llm: ChatOpenAI
+    category_info: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    Run binary classification for a single category.
+    Run binary classification for a single category using the agent.
 
     Args:
         title: Ticket title
@@ -70,7 +249,6 @@ async def _binary_classify_category(
         priority: Ticket priority
         category_id: Category ID to evaluate
         category_info: Category metadata from taxonomy
-        llm: ChatOpenAI instance
 
     Returns:
         Dict with decision, confidence, reasoning
@@ -91,17 +269,31 @@ async def _binary_classify_category(
     )
 
     try:
-        response = await llm.ainvoke([
-            {"role": "system", "content": "You are a ticket classification specialist. Respond only with valid JSON."},
-            {"role": "user", "content": prompt}
-        ])
+        # Get the binary classification agent
+        agent = get_binary_classification_agent()
 
-        result = json.loads(response.content)
+        # Invoke the agent
+        result = await agent.ainvoke({
+            "messages": [{"role": "user", "content": prompt}]
+        })
+
+        # Extract the response from tool messages
+        result_data = {}
+        for msg in reversed(result.get("messages", [])):
+            if hasattr(msg, "content") and msg.content:
+                try:
+                    data = json.loads(msg.content)
+                    if isinstance(data, dict) and "decision" in data:
+                        result_data = data
+                        break
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
         return {
             "category_id": category_id,
-            "decision": result.get("decision", False),
-            "confidence": result.get("confidence", 0.0),
-            "reasoning": result.get("reasoning", "")
+            "decision": result_data.get("decision", False),
+            "confidence": result_data.get("confidence", 0.0),
+            "reasoning": result_data.get("reasoning", "")
         }
 
     except Exception as e:
@@ -112,6 +304,10 @@ async def _binary_classify_category(
             "reasoning": f"Classification error: {str(e)}"
         }
 
+
+# ============================================================================
+# MAIN TOOL FUNCTIONS
+# ============================================================================
 
 @tool
 async def classify_ticket_categories(
@@ -126,7 +322,7 @@ async def classify_ticket_categories(
     STEP 1: Generate ticket embedding (1 API call)
     STEP 2: Compute cosine similarity to all 25 category embeddings (no API call)
     STEP 3: Select TOP-5 candidates above similarity threshold (0.3)
-    STEP 4: Run parallel binary classifiers for TOP-5 (5 API calls)
+    STEP 4: Run parallel binary classifiers using agents for TOP-5 (5 agent calls)
     STEP 5: Compute ensemble scores: 0.4 * semantic + 0.6 * LLM confidence
     STEP 6: Filter by threshold and limit to max 3 categories
 
@@ -219,15 +415,9 @@ async def classify_ticket_categories(
             }
 
         # ================================================================
-        # STEP 4: Run parallel binary classifiers for TOP-K candidates
+        # STEP 4: Run parallel binary classifiers using agents for TOP-K
         # ================================================================
         pipeline_info["step4_binary_classifiers"] = "in_progress"
-
-        llm = ChatOpenAI(
-            model=Config.CATEGORY_CLASSIFICATION_MODEL,
-            temperature=Config.CATEGORY_CLASSIFICATION_TEMPERATURE,
-            model_kwargs={"response_format": {"type": "json_object"}}
-        )
 
         # Create tasks for parallel execution
         binary_tasks = []
@@ -237,13 +427,13 @@ async def classify_ticket_categories(
                 binary_tasks.append(
                     _binary_classify_category(
                         title, description, priority,
-                        cat_id, category_info, llm
+                        cat_id, category_info
                     )
                 )
 
         # Run all binary classifiers in parallel
         binary_results = await asyncio.gather(*binary_tasks)
-        pipeline_info["step4_binary_classifiers"] = f"completed ({len(binary_results)} classifiers)"
+        pipeline_info["step4_binary_classifiers"] = f"completed ({len(binary_results)} agent calls)"
 
         # ================================================================
         # STEP 5: Compute ensemble scores
@@ -323,7 +513,7 @@ async def classify_ticket_categories(
             "novelty_reasoning": novelty_reasoning,
             "semantic_candidates": semantic_candidates,
             "pipeline_info": pipeline_info,
-            # NEW: Pass through for novelty detection
+            # Pass through for novelty detection
             "ticket_embedding": ticket_embedding,
             "all_similarity_scores": all_similarity_scores
         }
@@ -352,7 +542,7 @@ async def generate_business_labels(
     confidence_threshold: float = 0.7
 ) -> Dict[str, Any]:
     """
-    Generate business-oriented labels using AI analysis.
+    Generate business-oriented labels using the business label agent.
 
     Analyzes the ticket from a business impact perspective and generates
     relevant business labels.
@@ -369,51 +559,39 @@ async def generate_business_labels(
     Returns:
         Dict with labels list and actual_prompt
     """
-    llm = ChatOpenAI(
-        model=Config.CLASSIFICATION_MODEL,
-        temperature=0.4,
-        model_kwargs={"response_format": {"type": "json_object"}}
+    # Generate the user prompt
+    user_prompt = get_business_label_prompt(
+        title=title,
+        description=description,
+        domain=domain,
+        priority=priority,
+        existing_labels=existing_labels,
+        max_labels=max_labels
     )
 
-    user_prompt = f"""You are a business analyst expert in IT service management.
-
-Generate business-oriented labels for this ticket from a business impact perspective.
-
-Ticket:
-Title: {title}
-Description: {description}
-Domain: {domain}
-Priority: {priority}
-
-Existing labels to avoid duplicating: {existing_labels}
-
-Business label categories to consider:
-- Impact: Customer-facing, Internal, Revenue-impacting
-- Urgency: Time-sensitive, Compliance-related, SLA-bound
-- Process: Workflow-blocking, Data-quality, Integration-issue
-
-Output JSON with up to {max_labels} labels:
-{{
-  "business_labels": [
-    {{
-      "label": "label name",
-      "confidence": 0.0-1.0,
-      "category": "Impact/Urgency/Process",
-      "reasoning": "brief explanation"
-    }}
-  ]
-}}"""
-
     try:
-        response = await llm.ainvoke([
-            {"role": "system", "content": "You are a business analyst expert. Respond only with valid JSON."},
-            {"role": "user", "content": user_prompt}
-        ])
+        # Get the business label agent
+        agent = get_business_label_agent()
 
-        result = json.loads(response.content)
+        # Invoke the agent
+        result = await agent.ainvoke({
+            "messages": [{"role": "user", "content": user_prompt}]
+        })
+
+        # Extract the response from tool messages
+        result_data = {}
+        for msg in reversed(result.get("messages", [])):
+            if hasattr(msg, "content") and msg.content:
+                try:
+                    data = json.loads(msg.content)
+                    if isinstance(data, dict) and "business_labels" in data:
+                        result_data = data
+                        break
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
         labels = []
-
-        for item in result.get("business_labels", []):
+        for item in result_data.get("business_labels", []):
             if item.get("confidence", 0) >= confidence_threshold:
                 labels.append({
                     "label": item.get("label", ""),
@@ -439,7 +617,7 @@ async def generate_technical_labels(
     confidence_threshold: float = 0.7
 ) -> Dict[str, Any]:
     """
-    Generate technical labels using AI analysis.
+    Generate technical labels using the technical label agent.
 
     Analyzes the ticket from a technical/root-cause perspective and generates
     relevant technical labels.
@@ -456,51 +634,39 @@ async def generate_technical_labels(
     Returns:
         Dict with labels list and actual_prompt
     """
-    llm = ChatOpenAI(
-        model=Config.CLASSIFICATION_MODEL,
-        temperature=0.3,
-        model_kwargs={"response_format": {"type": "json_object"}}
+    # Generate the user prompt
+    user_prompt = get_technical_label_prompt(
+        title=title,
+        description=description,
+        domain=domain,
+        priority=priority,
+        existing_labels=existing_labels,
+        max_labels=max_labels
     )
 
-    user_prompt = f"""You are a senior software engineer expert in system diagnostics.
-
-Generate technical labels for this ticket from a technical/root-cause perspective.
-
-Ticket:
-Title: {title}
-Description: {description}
-Domain: {domain}
-Priority: {priority}
-
-Existing labels to avoid duplicating: {existing_labels}
-
-Technical label categories to consider:
-- Component: Database, API, UI, Integration, Batch
-- Issue Type: Performance, Error, Configuration, Data
-- Root Cause: Connection, Timeout, Memory, Logic, External
-
-Output JSON with up to {max_labels} labels:
-{{
-  "technical_labels": [
-    {{
-      "label": "label name",
-      "confidence": 0.0-1.0,
-      "category": "Component/Issue Type/Root Cause",
-      "reasoning": "brief explanation"
-    }}
-  ]
-}}"""
-
     try:
-        response = await llm.ainvoke([
-            {"role": "system", "content": "You are a software engineer expert. Respond only with valid JSON."},
-            {"role": "user", "content": user_prompt}
-        ])
+        # Get the technical label agent
+        agent = get_technical_label_agent()
 
-        result = json.loads(response.content)
+        # Invoke the agent
+        result = await agent.ainvoke({
+            "messages": [{"role": "user", "content": user_prompt}]
+        })
+
+        # Extract the response from tool messages
+        result_data = {}
+        for msg in reversed(result.get("messages", [])):
+            if hasattr(msg, "content") and msg.content:
+                try:
+                    data = json.loads(msg.content)
+                    if isinstance(data, dict) and "technical_labels" in data:
+                        result_data = data
+                        break
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
         labels = []
-
-        for item in result.get("technical_labels", []):
+        for item in result_data.get("technical_labels", []):
             if item.get("confidence", 0) >= confidence_threshold:
                 labels.append({
                     "label": item.get("label", ""),

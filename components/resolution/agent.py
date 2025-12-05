@@ -3,6 +3,9 @@ Resolution Agent - LangGraph node for resolution generation.
 
 This agent extracts resolution steps from similar historical tickets and
 generates a comprehensive resolution plan with summary and considerations.
+
+Uses LangGraph's create_react_agent internally via the generate_resolution_plan tool.
+Prompts are sourced from components/resolution/prompts.py.
 """
 
 from typing import Dict, Any

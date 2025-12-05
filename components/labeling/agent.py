@@ -5,6 +5,9 @@ This agent assigns labels to tickets using three methods:
 1. Category labels from predefined taxonomy (categories.json)
 2. AI-generated business labels
 3. AI-generated technical labels
+
+Uses LangGraph's create_react_agent internally via the labeling tools.
+Prompts are sourced from components/labeling/prompts.py.
 """
 
 import asyncio
