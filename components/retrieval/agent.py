@@ -1,5 +1,5 @@
 """
-Retrieval Agent - LangGraph node for pattern recognition.
+Retrieval Agent - LangGraph node for historical matching.
 
 This agent searches for similar historical tickets using FAISS
 and applies hybrid scoring for relevance ranking.
@@ -12,7 +12,7 @@ from components.retrieval.tools import search_similar_tickets, apply_hybrid_scor
 
 async def retrieval_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
-    LangGraph node for pattern recognition / retrieval.
+    LangGraph node for historical matching / retrieval.
 
     Searches for similar historical tickets based on the classified domain,
     applies hybrid scoring, and returns the top matches.

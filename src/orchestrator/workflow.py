@@ -9,7 +9,7 @@ using LangGraph's StateGraph for workflow orchestration.
 
 Configuration:
 - SKIP_DOMAIN_CLASSIFICATION: When True, skips the Domain Classification Agent
-  and starts directly from Pattern Recognition Agent. Set to False to re-enable.
+  and starts directly from Historical Match Agent. Set to False to re-enable.
 """
 
 from langgraph.graph import StateGraph, END
@@ -179,7 +179,7 @@ def build_workflow() -> StateGraph:
     - Conditional routing based on agent status
 
     When SKIP_DOMAIN_CLASSIFICATION is True:
-    - Entry point is Pattern Recognition Agent (skips classification)
+    - Entry point is Historical Match Agent (skips classification)
     - Domain Classification Agent node is still added but not used
 
     Returns:
@@ -192,7 +192,7 @@ def build_workflow() -> StateGraph:
     # Note: Classification node is added but may not be used if SKIP_DOMAIN_CLASSIFICATION is True
     if not SKIP_DOMAIN_CLASSIFICATION:
         workflow.add_node("Domain Classification Agent", classification_node)
-    workflow.add_node("Pattern Recognition Agent", retrieval_node)
+    workflow.add_node("Historical Match Agent", retrieval_node)
     workflow.add_node("Label Assignment Agent", labeling_node)
     workflow.add_node("Novelty Detection Agent", novelty_node)
     workflow.add_node("Resolution Generation Agent", resolution_node)
@@ -201,8 +201,8 @@ def build_workflow() -> StateGraph:
     # Set entry point based on configuration
     if SKIP_DOMAIN_CLASSIFICATION:
         # Skip classification - start directly from Pattern Recognition
-        workflow.set_entry_point("Pattern Recognition Agent")
-        print("⚡ Domain Classification Agent DISABLED - starting from Pattern Recognition")
+        workflow.set_entry_point("Historical Match Agent")
+        print("⚡ Domain Classification Agent DISABLED - starting from Historical Match")
     else:
         # Normal flow - start from Domain Classification
         workflow.set_entry_point("Domain Classification Agent")
@@ -211,14 +211,14 @@ def build_workflow() -> StateGraph:
             "Domain Classification Agent",
             route_after_classification,
             {
-                "retrieval": "Pattern Recognition Agent",
+                "retrieval": "Historical Match Agent",
                 "error_handler": "Error Handler"
             }
         )
 
-    # Add conditional edges for Pattern Recognition -> Label Assignment
+    # Add conditional edges for Historical Match -> Label Assignment
     workflow.add_conditional_edges(
-        "Pattern Recognition Agent",
+        "Historical Match Agent",
         route_after_retrieval,
         {
             "labeling": "Label Assignment Agent",

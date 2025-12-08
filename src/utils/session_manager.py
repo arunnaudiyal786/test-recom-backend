@@ -82,7 +82,7 @@ class SessionManager:
 
         Args:
             session_id: Session identifier
-            agent_name: Name of the agent (e.g., 'pattern_recognition_agent')
+            agent_name: Name of the agent (e.g., 'historical_match_agent')
             data: Agent output data to save
 
         Returns:
@@ -276,28 +276,31 @@ class SessionManager:
         Normalize agent name to a filesystem-safe filename.
 
         Args:
-            agent_name: Agent name (e.g., 'patternRecognition', 'Pattern Recognition Agent')
+            agent_name: Agent name (e.g., 'historicalMatch', 'Historical Match Agent')
 
         Returns:
-            Normalized filename (e.g., 'pattern_recognition_agent')
+            Normalized filename (e.g., 'historical_match_agent')
         """
         # Mapping from API keys to filenames
         name_mapping = {
             "classification": "classification_agent",
-            "patternRecognition": "pattern_recognition_agent",
+            "historicalMatch": "historical_match_agent",
             "labelAssignment": "label_assignment_agent",
             "novelty": "novelty_detection_agent",
             "resolutionGeneration": "resolution_generation_agent",
             # Full names
             "Domain Classification Agent": "classification_agent",
-            "Pattern Recognition Agent": "pattern_recognition_agent",
+            "Historical Match Agent": "historical_match_agent",
             "Label Assignment Agent": "label_assignment_agent",
             "Novelty Detection Agent": "novelty_detection_agent",
             "Resolution Generation Agent": "resolution_generation_agent",
             # Short names from node state
-            "retrieval": "pattern_recognition_agent",
+            "retrieval": "historical_match_agent",
             "labeling": "label_assignment_agent",
             "resolution": "resolution_generation_agent",
+            # Backward compatibility
+            "patternRecognition": "historical_match_agent",
+            "Pattern Recognition Agent": "historical_match_agent",
         }
 
         if agent_name in name_mapping:

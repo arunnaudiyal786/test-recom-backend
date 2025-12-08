@@ -5,7 +5,68 @@ This module contains all prompt templates used by the Labeling Agent
 for category classification and label generation.
 """
 
-from typing import List
+from typing import List, Dict, Any
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def _format_similar_tickets_context(
+    similar_tickets: List[Dict[str, Any]],
+    max_tickets: int = 5
+) -> str:
+    """
+    Format similar tickets for prompt context.
+
+    Provides historical context from Historical Match Agent output
+    to help inform business and technical label generation.
+
+    Args:
+        similar_tickets: List of similar ticket dicts from retrieval agent
+        max_tickets: Maximum number of tickets to include (default 5)
+
+    Returns:
+        Formatted string for prompt context
+    """
+    if not similar_tickets:
+        return "No similar historical tickets found."
+
+    lines = []
+    for i, ticket in enumerate(similar_tickets[:max_tickets], 1):
+        # Handle both "title" and "summary" field names
+        title = ticket.get("title", ticket.get("summary", "N/A"))
+
+        # Extract labels (may be list or comma-separated string)
+        labels = ticket.get("labels", [])
+        if isinstance(labels, str):
+            labels_str = labels
+        elif isinstance(labels, list):
+            labels_str = ", ".join(labels) if labels else "None"
+        else:
+            labels_str = "None"
+
+        # Get resolution and truncate for brevity
+        resolution = ticket.get("resolution", "")
+        if resolution:
+            resolution = resolution[:200].replace("\n", " ").strip()
+            if len(ticket.get("resolution", "")) > 200:
+                resolution += "..."
+        else:
+            resolution = "N/A"
+
+        # Get similarity score if available
+        similarity = ticket.get("similarity_score", ticket.get("score", None))
+        similarity_str = f" (similarity: {similarity:.2f})" if similarity else ""
+
+        lines.append(
+            f"Ticket {i}{similarity_str}:\n"
+            f"  Title: {title}\n"
+            f"  Labels: {labels_str}\n"
+            f"  Resolution: {resolution}"
+        )
+
+    return "\n\n".join(lines)
+
 
 # ============================================================================
 # SYSTEM PROMPTS
@@ -92,7 +153,7 @@ Respond ONLY with valid JSON."""
 
 BUSINESS_LABEL_TEMPLATE = """Generate business-oriented labels for this ticket from a business impact perspective.
 
-Ticket:
+=== CURRENT TICKET ===
 Title: {title}
 Description: {description}
 Domain: {domain}
@@ -100,7 +161,13 @@ Priority: {priority}
 
 Existing labels to avoid duplicating: {existing_labels}
 
-Business label categories to consider:
+=== SIMILAR HISTORICAL TICKETS (for reference) ===
+{similar_tickets_context}
+
+Use the patterns from similar tickets to inform your label generation.
+Pay attention to what business impact labels were historically assigned to similar issues.
+
+=== BUSINESS LABEL CATEGORIES ===
 - Impact: Customer-facing, Internal, Revenue-impacting
 - Urgency: Time-sensitive, Compliance-related, SLA-bound
 - Process: Workflow-blocking, Data-quality, Integration-issue
@@ -124,7 +191,7 @@ Output JSON with up to {max_labels} labels:
 
 TECHNICAL_LABEL_TEMPLATE = """Generate technical labels for this ticket from a technical/root-cause perspective.
 
-Ticket:
+=== CURRENT TICKET ===
 Title: {title}
 Description: {description}
 Domain: {domain}
@@ -132,7 +199,13 @@ Priority: {priority}
 
 Existing labels to avoid duplicating: {existing_labels}
 
-Technical label categories to consider:
+=== SIMILAR HISTORICAL TICKETS (for reference) ===
+{similar_tickets_context}
+
+Use the patterns from similar tickets to inform your label generation.
+Pay attention to what technical labels and root causes were historically identified for similar issues.
+
+=== TECHNICAL LABEL CATEGORIES ===
 - Component: Database, API, UI, Integration, Batch
 - Issue Type: Performance, Error, Configuration, Data
 - Root Cause: Connection, Timeout, Memory, Logic, External
@@ -198,7 +271,8 @@ def get_business_label_prompt(
     domain: str,
     priority: str,
     existing_labels: List[str],
-    max_labels: int = 5
+    max_labels: int = 5,
+    similar_tickets: List[Dict[str, Any]] = None
 ) -> str:
     """
     Generate prompt for business label generation.
@@ -210,11 +284,13 @@ def get_business_label_prompt(
         priority: Ticket priority
         existing_labels: Labels to avoid duplicating
         max_labels: Maximum labels to generate
+        similar_tickets: List of similar tickets for historical context (top 5)
 
     Returns:
         Formatted prompt for business label generation
     """
     existing_labels_text = ', '.join(existing_labels) if existing_labels else 'None'
+    similar_tickets_context = _format_similar_tickets_context(similar_tickets or [])
 
     return BUSINESS_LABEL_TEMPLATE.format(
         title=title,
@@ -222,7 +298,8 @@ def get_business_label_prompt(
         domain=domain,
         priority=priority,
         existing_labels=existing_labels_text,
-        max_labels=max_labels
+        max_labels=max_labels,
+        similar_tickets_context=similar_tickets_context
     )
 
 
@@ -232,7 +309,8 @@ def get_technical_label_prompt(
     domain: str,
     priority: str,
     existing_labels: List[str],
-    max_labels: int = 5
+    max_labels: int = 5,
+    similar_tickets: List[Dict[str, Any]] = None
 ) -> str:
     """
     Generate prompt for technical label generation.
@@ -244,11 +322,13 @@ def get_technical_label_prompt(
         priority: Ticket priority
         existing_labels: Labels to avoid duplicating
         max_labels: Maximum labels to generate
+        similar_tickets: List of similar tickets for historical context (top 5)
 
     Returns:
         Formatted prompt for technical label generation
     """
     existing_labels_text = ', '.join(existing_labels) if existing_labels else 'None'
+    similar_tickets_context = _format_similar_tickets_context(similar_tickets or [])
 
     return TECHNICAL_LABEL_TEMPLATE.format(
         title=title,
@@ -256,5 +336,6 @@ def get_technical_label_prompt(
         domain=domain,
         priority=priority,
         existing_labels=existing_labels_text,
-        max_labels=max_labels
+        max_labels=max_labels,
+        similar_tickets_context=similar_tickets_context
     )

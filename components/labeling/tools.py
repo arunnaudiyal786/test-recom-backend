@@ -78,7 +78,14 @@ def submit_business_labels(labels_json: str) -> str:
         JSON string of the business labels result
     """
     try:
-        labels = json.loads(labels_json) if labels_json else []
+        parsed = json.loads(labels_json) if labels_json else []
+        # Handle both formats: array or object with business_labels key
+        if isinstance(parsed, dict) and "business_labels" in parsed:
+            labels = parsed["business_labels"]
+        elif isinstance(parsed, list):
+            labels = parsed
+        else:
+            labels = []
     except json.JSONDecodeError:
         labels = []
     return json.dumps({"business_labels": labels})
@@ -99,7 +106,14 @@ def submit_technical_labels(labels_json: str) -> str:
         JSON string of the technical labels result
     """
     try:
-        labels = json.loads(labels_json) if labels_json else []
+        parsed = json.loads(labels_json) if labels_json else []
+        # Handle both formats: array or object with technical_labels key
+        if isinstance(parsed, dict) and "technical_labels" in parsed:
+            labels = parsed["technical_labels"]
+        elif isinstance(parsed, list):
+            labels = parsed
+        else:
+            labels = []
     except json.JSONDecodeError:
         labels = []
     return json.dumps({"technical_labels": labels})
@@ -539,13 +553,14 @@ async def generate_business_labels(
     priority: str,
     existing_labels: List[str],
     max_labels: int = 5,
-    confidence_threshold: float = 0.7
+    confidence_threshold: float = 0.7,
+    similar_tickets: List[Dict] = None
 ) -> Dict[str, Any]:
     """
     Generate business-oriented labels using the business label agent.
 
     Analyzes the ticket from a business impact perspective and generates
-    relevant business labels.
+    relevant business labels. Uses similar historical tickets for context.
 
     Args:
         title: Ticket title
@@ -555,18 +570,20 @@ async def generate_business_labels(
         existing_labels: Labels to avoid duplicating
         max_labels: Maximum labels to generate (default 5)
         confidence_threshold: Minimum confidence to include (default 0.7)
+        similar_tickets: Top 5 similar tickets for historical context
 
     Returns:
         Dict with labels list and actual_prompt
     """
-    # Generate the user prompt
+    # Generate the user prompt with similar tickets context
     user_prompt = get_business_label_prompt(
         title=title,
         description=description,
         domain=domain,
         priority=priority,
         existing_labels=existing_labels,
-        max_labels=max_labels
+        max_labels=max_labels,
+        similar_tickets=similar_tickets or []
     )
 
     try:
@@ -614,13 +631,14 @@ async def generate_technical_labels(
     priority: str,
     existing_labels: List[str],
     max_labels: int = 5,
-    confidence_threshold: float = 0.7
+    confidence_threshold: float = 0.7,
+    similar_tickets: List[Dict] = None
 ) -> Dict[str, Any]:
     """
     Generate technical labels using the technical label agent.
 
     Analyzes the ticket from a technical/root-cause perspective and generates
-    relevant technical labels.
+    relevant technical labels. Uses similar historical tickets for context.
 
     Args:
         title: Ticket title
@@ -630,18 +648,20 @@ async def generate_technical_labels(
         existing_labels: Labels to avoid duplicating
         max_labels: Maximum labels to generate (default 5)
         confidence_threshold: Minimum confidence to include (default 0.7)
+        similar_tickets: Top 5 similar tickets for historical context
 
     Returns:
         Dict with labels list and actual_prompt
     """
-    # Generate the user prompt
+    # Generate the user prompt with similar tickets context
     user_prompt = get_technical_label_prompt(
         title=title,
         description=description,
         domain=domain,
         priority=priority,
         existing_labels=existing_labels,
-        max_labels=max_labels
+        max_labels=max_labels,
+        similar_tickets=similar_tickets or []
     )
 
     try:
@@ -678,4 +698,5 @@ async def generate_technical_labels(
         return {"labels": labels, "actual_prompt": user_prompt}
 
     except Exception as e:
-        return {"labels": [], "actual_prompt": user_prompt}
+        print(f"   ⚠️  Technical label generation error: {str(e)}")
+        return {"labels": [], "actual_prompt": user_prompt, "error": str(e)}

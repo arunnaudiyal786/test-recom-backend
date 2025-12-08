@@ -197,12 +197,12 @@ async def process_ticket(input_file: Path, output_file: Path = None):
         """Convert agent name to file-friendly key."""
         mapping = {
             "Domain Classification Agent": "classification",
-            "Pattern Recognition Agent": "pattern_recognition",
+            "Historical Match Agent": "historical_match",
             "Label Assignment Agent": "label_assignment",
             "Novelty Detection Agent": "novelty_detection",
             "Resolution Generation Agent": "resolution_generation",
             "classification": "classification",
-            "retrieval": "pattern_recognition",
+            "retrieval": "historical_match",
             "labeling": "label_assignment",
             "novelty": "novelty_detection",
             "resolution": "resolution_generation",

@@ -45,8 +45,8 @@ This document explains the complete data flow and architecture of the Intelligen
 │                        LangGraph StateGraph                                 │
 │                                                                             │
 │   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌────────────┐  │
-│   │ Pattern      │──▶│ Label        │──▶│ Novelty      │──▶│ Resolution │  │
-│   │ Recognition  │   │ Assignment   │   │ Detection    │   │ Generation │  │
+│   │ Historical   │──▶│ Label        │──▶│ Novelty      │──▶│ Resolution │  │
+│   │ Match        │   │ Assignment   │   │ Detection    │   │ Generation │  │
 │   │ Agent        │   │ Agent        │   │ Agent        │   │ Agent      │  │
 │   └──────────────┘   └──────────────┘   └──────────────┘   └────────────┘  │
 │         │                   │                  │                  │         │
@@ -75,7 +75,7 @@ This document explains the complete data flow and architecture of the Intelligen
 
 **Key Insight**: This is a **sequential pipeline**, NOT a conversational agent system. Each agent must complete before the next starts.
 
-**Note**: Domain Classification Agent can be enabled via `SKIP_DOMAIN_CLASSIFICATION = False` in `src/orchestrator/workflow.py`. When enabled, it runs before Pattern Recognition.
+**Note**: Domain Classification Agent can be enabled via `SKIP_DOMAIN_CLASSIFICATION = False` in `src/orchestrator/workflow.py`. When enabled, it runs before Historical Match.
 
 ---
 
@@ -99,7 +99,7 @@ test-recom-backend/
 │   │   └── exceptions.py      # Custom exception classes
 │   │
 │   ├── classification/        # Domain Classification Agent (optional, skipped by default)
-│   ├── retrieval/             # Pattern Recognition Agent (FAISS search)
+│   ├── retrieval/             # Historical Match Agent (FAISS search)
 │   ├── labeling/              # Label Assignment Agent (hybrid semantic + LLM)
 │   │   ├── agent.py           # LangGraph node wrapper
 │   │   ├── tools.py           # @tool functions with create_agent for classification
@@ -112,7 +112,7 @@ test-recom-backend/
 │
 ├── src/
 │   ├── agents/                # LEGACY ARCHITECTURE - class-based agents (deprecated)
-│   │   ├── pattern_recognition_agent.py
+│   │   ├── historical_match_agent.py
 │   │   ├── label_assignment_agent.py
 │   │   └── resolution_generation_agent.py
 │   │
@@ -168,15 +168,15 @@ The codebase has evolved through two architectural approaches:
 ### The Legacy Pattern (`src/agents/`)
 
 ```python
-# src/agents/pattern_recognition_agent.py
-class PatternRecognitionAgent:
+# src/agents/historical_match_agent.py
+class HistoricalMatchAgent:
     async def __call__(self, state: TicketState) -> AgentOutput:
         # Direct implementation
         similar_tickets = await self.find_similar_tickets(...)
         return {"similar_tickets": similar_tickets, "status": "success"}
 
 # Usage: Singleton instance
-pattern_recognition_agent = PatternRecognitionAgent()
+historical_match_agent = HistoricalMatchAgent()
 ```
 
 ### The Current Pattern (`components/`)
@@ -224,7 +224,7 @@ def build_workflow() -> StateGraph:
     # Note: Classification node is optional (controlled by SKIP_DOMAIN_CLASSIFICATION)
     if not SKIP_DOMAIN_CLASSIFICATION:
         workflow.add_node("Domain Classification Agent", classification_node)
-    workflow.add_node("Pattern Recognition Agent", retrieval_node)
+    workflow.add_node("Historical Match Agent", retrieval_node)
     workflow.add_node("Label Assignment Agent", labeling_node)
     workflow.add_node("Novelty Detection Agent", novelty_node)
     workflow.add_node("Resolution Generation Agent", resolution_node)
@@ -232,13 +232,13 @@ def build_workflow() -> StateGraph:
 
     # 3. Set entry point (skips classification by default)
     if SKIP_DOMAIN_CLASSIFICATION:
-        workflow.set_entry_point("Pattern Recognition Agent")
+        workflow.set_entry_point("Historical Match Agent")
     else:
         workflow.set_entry_point("Domain Classification Agent")
 
     # 4. Add conditional edges (routing logic)
     workflow.add_conditional_edges(
-        "Pattern Recognition Agent",
+        "Historical Match Agent",
         route_after_retrieval,
         {"labeling": "Label Assignment Agent", "error_handler": "Error Handler"}
     )
@@ -296,7 +296,7 @@ The **wrapper** is the `agent.py` file. It wraps the tools to create a LangGraph
 
 async def retrieval_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
-    LangGraph node for pattern recognition / retrieval.
+    LangGraph node for historical matching / retrieval.
 
     THIS IS THE WRAPPER - it:
     1. Extracts needed data from state
@@ -423,18 +423,18 @@ Initial State:
   "status": "processing"
 }
      │
-     ▼ Pattern Recognition Agent
+     ▼ Historical Match Agent
 {
   "similar_tickets": [...],      # Added
   "status": "success",           # Updated
   "current_agent": "retrieval"   # Updated
 }
      │
-     ▼ Label Assignment Agent
+     ▼ Label Assignment Agent (uses similar_tickets[:5] for context)
 {
   "category_labels": [...],                 # Added (from taxonomy)
-  "business_labels": [...],                 # Added (AI-generated)
-  "technical_labels": [...],                # Added (AI-generated)
+  "business_labels": [...],                 # Added (AI-generated with similar tickets context)
+  "technical_labels": [...],                # Added (AI-generated with similar tickets context)
   "assigned_labels": ["[CAT]...", "[BIZ]...", "[TECH]..."],  # Combined
   "ticket_embedding": [...],                # Added (for novelty detection)
   "all_category_scores": [...],             # Added (for novelty detection)
@@ -486,7 +486,7 @@ POST /api/process-ticket
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 2. Pattern Recognition Agent (components/retrieval/agent.py)                │
+│ 2. Historical Match Agent (components/retrieval/agent.py)                   │
 │    └─▶ retrieval_node(state) called by LangGraph                            │
 │    └─▶ Calls search_similar_tickets tool (components/retrieval/tools.py)    │
 │        └─▶ Generates embedding via OpenAI                                   │
@@ -501,6 +501,7 @@ POST /api/process-ticket
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 3. Label Assignment Agent (components/labeling/agent.py)                    │
 │    └─▶ labeling_node(state) called by LangGraph                             │
+│    └─▶ Extracts top 5 similar_tickets from state (from Historical Match)    │
 │    └─▶ Runs HYBRID SEMANTIC + LLM classification pipeline:                  │
 │                                                                             │
 │    STEP 1: Generate ticket embedding (1 OpenAI API call)                    │
@@ -522,7 +523,9 @@ POST /api/process-ticket
 │                                                                             │
 │    └─▶ Also runs in PARALLEL via asyncio.gather:                            │
 │        ├─▶ generate_business_labels (AI-generated, using create_agent)      │
+│        │     └─▶ Includes top 5 similar tickets for historical context      │
 │        └─▶ generate_technical_labels (AI-generated, using create_agent)     │
+│              └─▶ Includes top 5 similar tickets for historical context      │
 │                                                                             │
 │    └─▶ Passes ticket_embedding and all_category_scores to novelty detection │
 │    └─▶ Returns partial state: {category_labels, business_labels,            │
@@ -765,8 +768,8 @@ The system supports tunable parameters via `RetrievalConfig` (`src/models/retrie
 | Purpose | File Path |
 |---------|-----------|
 | Tool implementation | `components/retrieval/tools.py:141` - `apply_hybrid_scoring()` |
-| Legacy class method | `src/agents/pattern_recognition_agent.py:223` - `apply_hybrid_scoring()` |
-| Configurable version | `src/agents/pattern_recognition_agent.py:115` - `apply_hybrid_scoring_with_config()` |
+| Legacy class method | `src/agents/historical_match_agent.py:223` - `apply_hybrid_scoring()` |
+| Configurable version | `src/agents/historical_match_agent.py:115` - `apply_hybrid_scoring_with_config()` |
 | Configuration model | `src/models/retrieval_config.py` - `RetrievalConfig` class |
 
 #### Output Fields Added to Tickets
@@ -1009,6 +1012,7 @@ python3 main.py
 | `SEMANTIC_TOP_K_CANDIDATES` | `5` | Candidates from semantic pre-filtering |
 | `ENSEMBLE_SEMANTIC_WEIGHT` | `0.4` | Weight for semantic similarity in labeling |
 | `ENSEMBLE_LLM_WEIGHT` | `0.6` | Weight for LLM confidence in labeling |
+| `LABEL_SIMILAR_TICKETS_COUNT` | `5` | Similar tickets to include in label prompts |
 | `NOVELTY_SCORE_THRESHOLD` | `0.6` | Threshold for novelty detection |
 
 ---
@@ -1026,19 +1030,19 @@ python3 main.py
 ### Agent Pipeline (Default Configuration)
 
 ```
-Pattern Recognition → Label Assignment → Novelty Detection → Resolution Generation
-      (FAISS)        (hybrid semantic    (multi-signal,     (Chain-of-Thought)
-                      + LLM ensemble)     no LLM calls)
+Historical Match → Label Assignment → Novelty Detection → Resolution Generation
+    (FAISS)         (hybrid semantic    (multi-signal,     (Chain-of-Thought)
+                     + LLM ensemble)     no LLM calls)
 ```
 
-| Agent | Purpose | LLM Calls |
-|-------|---------|-----------|
-| Pattern Recognition | FAISS similarity search + hybrid scoring | 1 (embedding only) |
-| Label Assignment | Hybrid semantic + LLM category classification | 5-8 (parallel agents) |
-| Novelty Detection | Multi-signal analysis (confidence, entropy, distance) | 0 (pure computation) |
-| Resolution Generation | Chain-of-Thought resolution plan | 1 (gpt-4o) |
+| Agent | Purpose | LLM Calls | Uses Similar Tickets |
+|-------|---------|-----------|---------------------|
+| Historical Match | FAISS similarity search + hybrid scoring | 1 (embedding only) | Produces them |
+| Label Assignment | Hybrid semantic + LLM category classification | 5-8 (parallel agents) | Top 5 for business/technical labels |
+| Novelty Detection | Multi-signal analysis (confidence, entropy, distance) | 0 (pure computation) | No |
+| Resolution Generation | Chain-of-Thought resolution plan | 1 (gpt-4o) | Yes (all retrieved) |
 
-**Note**: Domain Classification Agent can be optionally enabled by setting `SKIP_DOMAIN_CLASSIFICATION = False` in `src/orchestrator/workflow.py`, which adds it before Pattern Recognition.
+**Note**: Domain Classification Agent can be optionally enabled by setting `SKIP_DOMAIN_CLASSIFICATION = False` in `src/orchestrator/workflow.py`, which adds it before Historical Match.
 
 ### Key Architectural Pattern: `langchain.agents.create_agent`
 

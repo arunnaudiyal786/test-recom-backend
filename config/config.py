@@ -81,6 +81,10 @@ class Config:
     ENSEMBLE_SEMANTIC_WEIGHT = 0.4       # 40% weight for semantic similarity
     ENSEMBLE_LLM_WEIGHT = 0.6            # 60% weight for LLM binary classifier confidence
 
+    # ========== LABEL GENERATION WITH HISTORICAL CONTEXT ==========
+    # Number of similar tickets to include in business/technical label prompts
+    LABEL_SIMILAR_TICKETS_COUNT = 5      # Top N similar tickets for context
+
     # ========== NOVELTY DETECTION CONFIGURATION ==========
     # Signal 1: Maximum Confidence Score
     # If best category match has confidence below this, Signal 1 fires

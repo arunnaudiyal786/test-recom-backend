@@ -29,7 +29,7 @@ from src.models.retrieval_config import (
 )
 
 # Import agents from components (LangChain-style)
-from components.retrieval.agent import pattern_recognition_agent
+from components.retrieval.agent import pattern_recognition_agent as historical_match_agent
 from components.classification.agent import classification_agent
 from components.classification.tools import classify_ticket_domain
 
@@ -137,13 +137,13 @@ async def stream_agent_updates(ticket: TicketInput) -> AsyncGenerator[str, None]
                 "search_config": search_config,  # Include custom search config if saved
                 "processing_stage": "retrieval",
                 "status": "processing",
-                "current_agent": "Pattern Recognition Agent",
+                "current_agent": "Historical Match Agent",
                 "classified_domain": None,  # No domain classification - will search all domains
                 "messages": [],
             }
             # Agent names for progress tracking (without classification)
             agents = [
-                "Pattern Recognition Agent",
+                "Historical Match Agent",
                 "Label Assignment Agent",
                 "Resolution Generation Agent"
             ]
@@ -164,7 +164,7 @@ async def stream_agent_updates(ticket: TicketInput) -> AsyncGenerator[str, None]
             # Agent names for progress tracking (with classification)
             agents = [
                 "Domain Classification Agent",
-                "Pattern Recognition Agent",
+                "Historical Match Agent",
                 "Label Assignment Agent",
                 "Resolution Generation Agent"
             ]
@@ -335,12 +335,12 @@ def _agent_key(agent_name: str) -> str:
     mapping = {
         # Full names
         "Domain Classification Agent": "classification",
-        "Pattern Recognition Agent": "patternRecognition",
+        "Historical Match Agent": "historicalMatch",
         "Label Assignment Agent": "labelAssignment",
         "Resolution Generation Agent": "resolutionGeneration",
         # Short names (from node state current_agent field)
         "classification": "classification",
-        "retrieval": "patternRecognition",
+        "retrieval": "historicalMatch",
         "labeling": "labelAssignment",
         "resolution": "resolutionGeneration",
     }
@@ -371,7 +371,7 @@ def _extract_agent_data(agent_name: str, state: dict) -> dict:
             "reasoning": state.get("classification_reasoning"),
             "keywords": state.get("extracted_keywords", []),
         }
-    elif agent_key in ("pattern recognition agent", "retrieval"):
+    elif agent_key in ("historical match agent", "retrieval"):
         similar_tickets = state.get("similar_tickets", [])
         # Get top 5 similar tickets for display
         top_tickets = similar_tickets[:5] if similar_tickets else []
@@ -531,12 +531,12 @@ async def get_config():
     return {
         "skip_domain_classification": SKIP_DOMAIN_CLASSIFICATION,
         "active_agents": [
-            "Pattern Recognition Agent",
+            "Historical Match Agent",
             "Label Assignment Agent",
             "Resolution Generation Agent"
         ] if SKIP_DOMAIN_CLASSIFICATION else [
             "Domain Classification Agent",
-            "Pattern Recognition Agent",
+            "Historical Match Agent",
             "Label Assignment Agent",
             "Resolution Generation Agent"
         ]
@@ -717,7 +717,7 @@ async def preview_search(request: RetrievalPreviewRequest):
             classification_confidence = classification_result.get("confidence")
 
         # Run preview search with config
-        result = await pattern_recognition_agent.preview_search(
+        result = await historical_match_agent.preview_search(
             title=request.title,
             description=request.description,
             domain=domain,
@@ -900,7 +900,7 @@ async def get_session_agent_output(session_id: str, agent_name: str):
     """
     Get a specific agent's output from a session.
 
-    Agent names: classification, patternRecognition, labelAssignment,
+    Agent names: classification, historicalMatch, labelAssignment,
                  novelty, resolutionGeneration
     """
     try:

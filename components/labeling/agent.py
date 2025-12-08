@@ -44,7 +44,12 @@ async def labeling_node(state: Dict[str, Any]) -> Dict[str, Any]:
         priority = state.get("priority") or "Medium"
         ticket_id = state.get("ticket_id", "N/A")
 
+        # Get top N similar tickets from Historical Match Agent for label context
+        similar_tickets = state.get("similar_tickets", [])[:Config.LABEL_SIMILAR_TICKETS_COUNT]
+
         print(f"\n🏷️  Labeling Agent - Assigning labels: {ticket_id}")
+        if similar_tickets:
+            print(f"   📋 Using {len(similar_tickets)} similar tickets for context")
 
         # Run all three label methods in parallel
         # 1. Category classification (replaces historical labels)
@@ -54,7 +59,7 @@ async def labeling_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "priority": priority
         })
 
-        # 2. Business labels (uses Config for max count)
+        # 2. Business labels (uses Config for max count + similar tickets context)
         business_task = generate_business_labels.ainvoke({
             "title": title,
             "description": description,
@@ -62,10 +67,11 @@ async def labeling_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "priority": priority,
             "existing_labels": [],  # No historical labels to avoid
             "max_labels": Config.BUSINESS_LABEL_MAX_COUNT,
-            "confidence_threshold": Config.GENERATED_LABEL_CONFIDENCE_THRESHOLD
+            "confidence_threshold": Config.GENERATED_LABEL_CONFIDENCE_THRESHOLD,
+            "similar_tickets": similar_tickets  # Pass top 5 similar tickets for context
         })
 
-        # 3. Technical labels (uses Config for max count)
+        # 3. Technical labels (uses Config for max count + similar tickets context)
         technical_task = generate_technical_labels.ainvoke({
             "title": title,
             "description": description,
@@ -73,7 +79,8 @@ async def labeling_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "priority": priority,
             "existing_labels": [],  # No historical labels to avoid
             "max_labels": Config.TECHNICAL_LABEL_MAX_COUNT,
-            "confidence_threshold": Config.GENERATED_LABEL_CONFIDENCE_THRESHOLD
+            "confidence_threshold": Config.GENERATED_LABEL_CONFIDENCE_THRESHOLD,
+            "similar_tickets": similar_tickets  # Pass top 5 similar tickets for context
         })
 
         # Wait for all tasks
