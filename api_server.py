@@ -145,6 +145,7 @@ async def stream_agent_updates(ticket: TicketInput) -> AsyncGenerator[str, None]
             agents = [
                 "Historical Match Agent",
                 "Label Assignment Agent",
+                "Novelty Detection Agent",
                 "Resolution Generation Agent"
             ]
         else:
@@ -166,6 +167,7 @@ async def stream_agent_updates(ticket: TicketInput) -> AsyncGenerator[str, None]
                 "Domain Classification Agent",
                 "Historical Match Agent",
                 "Label Assignment Agent",
+                "Novelty Detection Agent",
                 "Resolution Generation Agent"
             ]
 
@@ -337,11 +339,13 @@ def _agent_key(agent_name: str) -> str:
         "Domain Classification Agent": "classification",
         "Historical Match Agent": "historicalMatch",
         "Label Assignment Agent": "labelAssignment",
+        "Novelty Detection Agent": "noveltyDetection",
         "Resolution Generation Agent": "resolutionGeneration",
         # Short names (from node state current_agent field)
         "classification": "classification",
         "retrieval": "historicalMatch",
         "labeling": "labelAssignment",
+        "novelty": "noveltyDetection",
         "resolution": "resolutionGeneration",
     }
     return mapping.get(agent_name, agent_name.lower().replace(" ", "_"))
@@ -465,6 +469,15 @@ def _extract_agent_data(agent_name: str, state: dict) -> dict:
 
             # Actual prompts for transparency
             "actual_prompts": actual_prompts,
+        }
+    elif agent_key in ("novelty detection agent", "novelty"):
+        return {
+            "novelty_detected": state.get("novelty_detected", False),
+            "novelty_score": state.get("novelty_score", 0),
+            "novelty_signals": state.get("novelty_signals", {}),
+            "novelty_recommendation": state.get("novelty_recommendation", "proceed"),
+            "novelty_reasoning": state.get("novelty_reasoning", ""),
+            "novelty_details": state.get("novelty_details", {}),
         }
     elif agent_key in ("resolution generation agent", "resolution"):
         resolution = state.get("resolution_plan", {})

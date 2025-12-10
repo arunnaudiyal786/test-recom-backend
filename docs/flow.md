@@ -8,13 +8,14 @@ This document explains the complete data flow and architecture of the Intelligen
 
 1. [Architecture Overview](#1-architecture-overview)
 2. [Directory Structure & Purpose](#2-directory-structure--purpose)
-3. [The Two Architectural Patterns](#3-the-two-architectural-patterns)
+3. [Component Architecture Pattern](#3-component-architecture-pattern)
 4. [LangGraph Orchestration](#4-langgraph-orchestration)
 5. [Component Anatomy](#5-component-anatomy)
 6. [State Management](#6-state-management)
 7. [Complete Data Flow](#7-complete-data-flow)
    - [FAISS Search Details](#faiss-search-details)
    - [Hybrid Scoring Mechanism (Deep Dive)](#hybrid-scoring-mechanism-deep-dive)
+   - [Novelty Detection Details](#novelty-detection-details)
 8. [API Layer](#8-api-layer)
 9. [Key Concepts Explained](#9-key-concepts-explained)
 10. [Common Modification Patterns](#10-common-modification-patterns)
@@ -87,12 +88,12 @@ test-recom-backend/
 ├── api_server.py              # FastAPI app - HTTP entry point
 ├── main.py                    # CLI entry point for batch processing
 │
-├── config/                    # Configuration files (CURRENT LOCATION)
+├── config/                    # Configuration files
 │   ├── config.py              # Config class with all settings
 │   ├── schema_config.yaml     # Domain/label definitions for UI
 │   └── search_config.json     # Saved search parameters (auto-generated)
 │
-├── components/                # CURRENT ARCHITECTURE - LangChain-style agents
+├── components/                # LangChain-style agent components
 │   ├── base/                  # Abstract base classes
 │   │   ├── component.py       # BaseComponent ABC
 │   │   ├── config.py          # ComponentConfig (Pydantic Settings)
@@ -107,23 +108,16 @@ test-recom-backend/
 │   │   ├── service.py         # CategoryTaxonomy for taxonomy management
 │   │   └── category_embeddings.py  # Pre-computed category embeddings
 │   ├── novelty/               # Novelty Detection Agent (multi-signal analysis)
+│   │   ├── agent.py           # LangGraph node wrapper
+│   │   ├── tools.py           # Multi-signal novelty detection logic
+│   │   └── novelty.md         # Comprehensive documentation
 │   ├── resolution/            # Resolution Generation Agent
 │   └── embedding/             # Utility service (not an agent)
 │
 ├── src/
-│   ├── agents/                # LEGACY ARCHITECTURE - class-based agents (deprecated)
-│   │   ├── historical_match_agent.py
-│   │   ├── label_assignment_agent.py
-│   │   └── resolution_generation_agent.py
-│   │
 │   ├── orchestrator/          # LangGraph workflow definition
 │   │   ├── state.py           # TicketWorkflowState TypedDict
 │   │   └── workflow.py        # StateGraph construction
-│   │
-│   ├── prompts/               # LLM prompt templates (legacy)
-│   │   ├── classification_prompts.py
-│   │   ├── label_assignment_prompts.py
-│   │   └── resolution_generation_prompts.py
 │   │
 │   ├── vectorstore/           # FAISS index management
 │   │   ├── faiss_manager.py   # Index CRUD operations
@@ -151,45 +145,30 @@ test-recom-backend/
 
 ---
 
-## 3. The Two Architectural Patterns
+## 3. Component Architecture Pattern
 
-### Why Two Patterns Exist
+### LangChain Tools + LangGraph Nodes
 
-The codebase has evolved through two architectural approaches:
+The codebase uses a clean separation of concerns:
 
-| Aspect | `src/agents/` (Legacy) | `components/` (Current) |
-|--------|----------------------|------------------------|
-| Style | Class-based with `__call__` | Functional with `@tool` decorators |
-| Framework | Custom implementation | LangChain tools pattern |
-| State | Passed via method args | Passed via LangGraph state dict |
-| Usage | Direct instantiation | Via LangGraph nodes |
-| HTTP Access | Not exposed | Optional router.py |
+| File | Purpose | Description |
+|------|---------|-------------|
+| `tools.py` | Business logic | Pure functions with `@tool` decorator |
+| `agent.py` | State management | LangGraph node wrapper (state in, partial state out) |
+| `service.py` | HTTP interface | Optional class-based interface for API endpoints |
+| `router.py` | API endpoints | Optional FastAPI router |
 
-### The Legacy Pattern (`src/agents/`)
-
-```python
-# src/agents/historical_match_agent.py
-class HistoricalMatchAgent:
-    async def __call__(self, state: TicketState) -> AgentOutput:
-        # Direct implementation
-        similar_tickets = await self.find_similar_tickets(...)
-        return {"similar_tickets": similar_tickets, "status": "success"}
-
-# Usage: Singleton instance
-historical_match_agent = HistoricalMatchAgent()
-```
-
-### The Current Pattern (`components/`)
+### The Pattern
 
 ```python
-# components/retrieval/tools.py
+# components/retrieval/tools.py - Business Logic
 @tool
 async def search_similar_tickets(title: str, description: str, ...) -> Dict:
     """Search FAISS for similar tickets."""
     # Implementation
     return {"similar_tickets": results}
 
-# components/retrieval/agent.py
+# components/retrieval/agent.py - LangGraph Node Wrapper
 async def retrieval_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """LangGraph node wrapper."""
     result = await search_similar_tickets.ainvoke({...})
@@ -374,7 +353,7 @@ class TicketWorkflowState(TypedDict, total=False):
     category_labels: Optional[List[Dict]]   # From predefined taxonomy
     business_labels: Optional[List[Dict]]   # AI-generated business labels
     technical_labels: Optional[List[Dict]]  # AI-generated technical labels
-    assigned_labels: Optional[List[str]]    # Combined (backward compat)
+    assigned_labels: Optional[List[str]]    # Combined labels for display
     ticket_embedding: Optional[List[float]] # For novelty detection
     all_category_scores: Optional[List[Dict]]  # For entropy calculation
 
@@ -435,9 +414,9 @@ Initial State:
   "category_labels": [...],                 # Added (from taxonomy)
   "business_labels": [...],                 # Added (AI-generated with similar tickets context)
   "technical_labels": [...],                # Added (AI-generated with similar tickets context)
-  "assigned_labels": ["[CAT]...", "[BIZ]...", "[TECH]..."],  # Combined
-  "ticket_embedding": [...],                # Added (for novelty detection)
-  "all_category_scores": [...],             # Added (for novelty detection)
+  "assigned_labels": ["[CAT]...", "[BIZ]...", "[TECH]..."],  # Combined for display
+  "ticket_embedding": [...],                # Added (passed to novelty detection)
+  "all_category_scores": [...],             # Added (passed to novelty detection)
   "status": "success"
 }
      │
@@ -767,9 +746,7 @@ The system supports tunable parameters via `RetrievalConfig` (`src/models/retrie
 
 | Purpose | File Path |
 |---------|-----------|
-| Tool implementation | `components/retrieval/tools.py:141` - `apply_hybrid_scoring()` |
-| Legacy class method | `src/agents/historical_match_agent.py:223` - `apply_hybrid_scoring()` |
-| Configurable version | `src/agents/historical_match_agent.py:115` - `apply_hybrid_scoring_with_config()` |
+| Tool implementation | `components/retrieval/tools.py` - `apply_hybrid_scoring()` |
 | Configuration model | `src/models/retrieval_config.py` - `RetrievalConfig` class |
 
 #### Output Fields Added to Tickets
@@ -791,6 +768,108 @@ After hybrid scoring, each ticket in the results contains:
     ...
 }
 ```
+
+### Novelty Detection Details
+
+The Novelty Detection Agent analyzes whether a ticket represents a **novel category** that doesn't exist in the current taxonomy. It runs after Label Assignment and before Resolution Generation.
+
+#### Why Novelty Detection?
+
+- **Taxonomy Evolution**: New types of issues emerge over time
+- **Prevent Misclassification**: Avoid forcing tickets into wrong categories
+- **Alert for Review**: Flag tickets that need human attention
+- **Improve Recommendations**: When novelty is detected, resolution can be adjusted
+
+#### Three-Signal Detection System
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                       NOVELTY DETECTION SIGNALS                              │
+│                                                                              │
+│  Signal 1: Maximum Confidence Score (40% weight)                             │
+│  ├── If best category match confidence < 0.5, fires                          │
+│  └── Detects: Weak category matches                                          │
+│                                                                              │
+│  Signal 2: Confidence Distribution Entropy (30% weight)                      │
+│  ├── If normalized Shannon entropy > 0.7, fires                              │
+│  └── Detects: Uncertainty spread evenly across all categories                │
+│                                                                              │
+│  Signal 3: Embedding Distance to Centroids (30% weight)                      │
+│  ├── If min cosine distance to any centroid > 0.4, fires                     │
+│  └── Detects: Semantic novelty (ticket far from all known categories)        │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Decision Logic
+
+```python
+novelty_score = (0.4 * signal_1) + (0.3 * signal_2) + (0.3 * signal_3)
+is_novel = (max_confidence < 0.5) OR (novelty_score > 0.6)
+```
+
+#### Recommendations
+
+| Condition | Recommendation | Action |
+|-----------|----------------|--------|
+| `novelty_score > 0.8` | `"escalate"` | Requires immediate taxonomy review |
+| Low confidence only | `"flag_for_review"` | May need new category |
+| Multiple signals | `"flag_for_review"` | Review category taxonomy |
+| Not novel | `"proceed"` | Continue to resolution |
+
+#### Data Flow
+
+```
+From Label Assignment Agent:
+├── ticket_embedding (3072-dim vector)
+├── all_category_scores ([{category_id, score}, ...])
+└── category_labels ([{id, name, confidence}, ...])
+          │
+          ▼
+Novelty Detection Agent (NO LLM CALLS - pure computation)
+├── Compute Signal 1: max_confidence analysis
+├── Compute Signal 2: entropy calculation
+├── Compute Signal 3: centroid distance (uses pre-computed embeddings)
+├── Calculate weighted novelty_score
+└── Determine recommendation
+          │
+          ▼
+To Resolution Generation Agent:
+├── novelty_detected: bool
+├── novelty_score: float (0-1)
+├── novelty_signals: {...signal details...}
+├── novelty_recommendation: "proceed" | "flag_for_review" | "escalate"
+└── novelty_reasoning: "Human-readable explanation"
+```
+
+#### Configuration (`config/config.py`)
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `NOVELTY_SIGNAL1_THRESHOLD` | 0.5 | Max confidence below this = signal fires |
+| `NOVELTY_SIGNAL2_THRESHOLD` | 0.7 | Entropy above this = signal fires |
+| `NOVELTY_SIGNAL3_THRESHOLD` | 0.4 | Distance above this = signal fires |
+| `NOVELTY_SIGNAL1_WEIGHT` | 0.4 | Weight for Signal 1 (40%) |
+| `NOVELTY_SIGNAL2_WEIGHT` | 0.3 | Weight for Signal 2 (30%) |
+| `NOVELTY_SIGNAL3_WEIGHT` | 0.3 | Weight for Signal 3 (30%) |
+| `NOVELTY_SCORE_THRESHOLD` | 0.6 | Score above this = novel |
+
+#### Code Locations
+
+| Purpose | File Path |
+|---------|-----------|
+| LangGraph node | `components/novelty/agent.py` - `novelty_node()` |
+| Detection logic | `components/novelty/tools.py` - `detect_novelty()` |
+| Category embeddings | `components/labeling/category_embeddings.py` - `CategoryEmbeddings` |
+| Pre-computed embeddings | `data/metadata/category_embeddings.json` |
+
+#### Key Characteristic: Zero LLM Calls
+
+The Novelty Detection Agent performs **pure mathematical computation**:
+- No OpenAI API calls
+- Processing time < 50ms
+- Uses pre-computed category embeddings loaded once at startup
+- Non-blocking errors (failures default to no novelty, don't fail pipeline)
 
 ---
 
@@ -963,9 +1042,11 @@ def apply_hybrid_scoring(
 
 ### Adding New Labels
 
-1. Edit `src/prompts/label_assignment_prompts.py`
-2. Add to `LABEL_CRITERIA` dict
-3. Rebuild FAISS if labels exist in historical data
+1. Edit `components/labeling/prompts.py`
+2. Add to label criteria or category definitions
+3. If adding categories, update `data/metadata/categories.json`
+4. Regenerate category embeddings: `python scripts/generate_category_embeddings.py`
+5. Rebuild FAISS if labels exist in historical data: `python scripts/setup_vectorstore.py`
 
 ---
 
